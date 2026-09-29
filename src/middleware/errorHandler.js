@@ -7,7 +7,7 @@ export const notFound = (req, res) => {
 
 export const errorHandler = (err, req, res, next) => {
   // Detailed error showed in the terminal for testing
-  console.error(err);
+  // console.error(err);
 
   const statusCode = err.statusCode || 500;
   res.status(statusCode).json({
