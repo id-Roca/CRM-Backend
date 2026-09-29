@@ -127,3 +127,111 @@ Send a POST request to the deployed login endpoint:
 `POST https://crm-backend-kids.onrender.com/api/auth/login`
 
 After a successful login, copy the returned JWT and use it to access the protected API routes.
+
+## Public API Routes
+
+The deployed API can be tested with the following routes.
+
+### Authentication
+
+**Login**
+
+`POST https://crm-backend-kids.onrender.com/api/auth/login`
+
+---
+
+### Companies
+
+**Get all companies**
+
+`GET https://crm-backend-kids.onrender.com/api/companies`
+
+**Get company by ID**
+
+`GET https://crm-backend-kids.onrender.com/api/companies/:id`
+
+**Create company**
+
+`POST https://crm-backend-kids.onrender.com/api/companies`
+
+**Update company**
+
+`PATCH https://crm-backend-kids.onrender.com/api/companies/:id`
+
+**Delete company**
+
+`DELETE https://crm-backend-kids.onrender.com/api/companies/:id`
+
+> ADMIN, SALES and SUPPORT can GET, POST and PATCH companies.  
+> Deleting a company is restricted to ADMIN.
+
+---
+
+### Contacts
+
+**Get all contacts**
+
+`GET https://crm-backend-kids.onrender.com/api/contacts`
+
+**Get contact by ID**
+
+`GET https://crm-backend-kids.onrender.com/api/contacts/:id`
+
+**Create contact**
+
+`POST https://crm-backend-kids.onrender.com/api/contacts`
+
+**Update contact**
+
+`PATCH https://crm-backend-kids.onrender.com/api/contacts/:id`
+
+**Delete contact**
+
+`DELETE https://crm-backend-kids.onrender.com/api/contacts/:id`
+
+> ADMIN, SALES and SUPPORT can GET, POST and PATCH contacts.  
+> Deleting a contact is restricted to ADMIN.
+
+---
+
+### Users
+
+**Get all users**
+
+`GET https://crm-backend-kids.onrender.com/api/users`
+
+**Get user by ID**
+
+`GET https://crm-backend-kids.onrender.com/api/users/:id`
+
+**Create user**
+
+`POST https://crm-backend-kids.onrender.com/api/users`
+
+**Update user**
+
+`PATCH https://crm-backend-kids.onrender.com/api/users/:id`
+
+**Delete user**
+
+`DELETE https://crm-backend-kids.onrender.com/api/users/:id`
+
+> All user-management routes are restricted to ADMIN.
+
+---
+
+### Authentication Header
+
+Except for the login route, the routes above require a valid JWT.
+
+After logging in, add the returned token to the request:
+
+```http
+Authorization: Bearer <JWT_TOKEN>
+```
+
+For routes containing `:id`, replace `:id` with the actual ID of the resource.
+
+Example:
+
+`GET https://crm-backend-kids.onrender.com/api/companies/1`
