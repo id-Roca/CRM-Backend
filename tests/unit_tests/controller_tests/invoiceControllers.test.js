@@ -168,7 +168,7 @@ describe("createNewInvoice", () => {
 
     await createNewInvoice(req, res, next);
 
-    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data: { offerId: 8, companyId: 1, contactId: 2, salesUserId: 3, companyName: "Offer Company", contactName: "Offer Contact", salesUserName: "Offer Sales", description: "Accepted work", amount: 900 } });
+    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data: { offer: { connect: { id: 8 } }, company: { connect: { id: 1 } }, contact: { connect: { id: 2 } }, salesUser: { connect: { id: 3 } }, companyName: "Offer Company", contactName: "Offer Contact", salesUserName: "Offer Sales", description: "Accepted work", amount: 900 } });
     expect(res.json).toHaveBeenCalledWith(invoice);
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
@@ -191,7 +191,7 @@ describe("createNewInvoice", () => {
 
     await createNewInvoice(req, res, next);
 
-    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data: { offerId: 8, companyId: 1, contactId: null, salesUserId: 3, companyName: "Offer Company", contactName: null, salesUserName: "Offer Sales", description: "Accepted work", amount: 900 } });
+    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data: { offer: { connect: { id: 8 } }, company: { connect: { id: 1 } }, salesUser: { connect: { id: 3 } }, companyName: "Offer Company", contactName: null, salesUserName: "Offer Sales", description: "Accepted work", amount: 900 } });
     expect(res.json).toHaveBeenCalledWith(invoice);
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
@@ -305,7 +305,7 @@ describe("createNewInvoice", () => {
 
     await createNewInvoice(req, res, next);
 
-    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data: { companyId: 1, contactId: null, salesUserId: 10, companyName: "Acme", contactName: null, salesUserName: "Current User", description: "Consulting", amount: 250 } });
+    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data: { company: { connect: { id: 1 } }, salesUser: { connect: { id: 10 } }, companyName: "Acme", contactName: null, salesUserName: "Current User", description: "Consulting", amount: 250 } });
     expect(res.json).toHaveBeenCalledWith(invoice);
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
@@ -323,7 +323,7 @@ describe("createNewInvoice", () => {
 
     await createNewInvoice(req, res, next);
 
-    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data: { companyId: 1, contactId: null, salesUserId: 10, companyName: "Acme", contactName: null, salesUserName: "Current User", description: "Consulting", amount: 250 } });
+    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data: { company: { connect: { id: 1 } }, salesUser: { connect: { id: 10 } }, companyName: "Acme", contactName: null, salesUserName: "Current User", description: "Consulting", amount: 250 } });
     expect(res.json).toHaveBeenCalledWith(invoice);
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
@@ -342,7 +342,7 @@ describe("createNewInvoice", () => {
 
     await createNewInvoice(req, res, next);
 
-    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data: { companyId: 1, contactId: 2, salesUserId: 3, companyName: "Acme", contactName: "Anna", salesUserName: "Assigned User", description: "Consulting", amount: 250 } });
+    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data: { company: { connect: { id: 1 } }, contact: { connect: { id: 2 } }, salesUser: { connect: { id: 3 } }, companyName: "Acme", contactName: "Anna", salesUserName: "Assigned User", description: "Consulting", amount: 250 } });
     expect(res.json).toHaveBeenCalledWith(invoice);
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);

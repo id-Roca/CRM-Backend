@@ -98,7 +98,9 @@ export const createNewInvoice = async (req, res, next) => {
       throw error;
     }
 
-    // INVOICE CREATED FROM AN OFFER
+    // =====================================================
+    // INVOICE CREATED FROM AN ACCEPTED OFFER
+    // =====================================================
     if (isOfferInvoice) {
       const { offerId } = result.data;
 
@@ -129,11 +131,31 @@ export const createNewInvoice = async (req, res, next) => {
 
       const newInvoiceFromOffer = await prisma.invoice.create({
         data: {
-          offerId: offer.id,
+          offer: {
+            connect: {
+              id: offer.id,
+            },
+          },
 
-          companyId: offer.companyId,
-          contactId: offer.contactId,
-          salesUserId: offer.salesUserId,
+          company: {
+            connect: {
+              id: offer.companyId,
+            },
+          },
+
+          ...(offer.contactId !== null && {
+            contact: {
+              connect: {
+                id: offer.contactId,
+              },
+            },
+          }),
+
+          salesUser: {
+            connect: {
+              id: offer.salesUserId,
+            },
+          },
 
           companyName: offer.company.name,
           contactName: offer.contact?.name ?? null,
@@ -147,7 +169,9 @@ export const createNewInvoice = async (req, res, next) => {
       return res.status(201).json(newInvoiceFromOffer);
     }
 
+    // =====================================================
     // DIRECT INVOICE
+    // =====================================================
     const {
       description,
       amount,
@@ -156,6 +180,8 @@ export const createNewInvoice = async (req, res, next) => {
       salesUserId: requestedSalesUserId,
     } = result.data;
 
+    // SALES users may not assign an invoice to another user.
+    // ADMIN may optionally choose another user.
     if (
       req.user.role !== "ADMIN" &&
       requestedSalesUserId !== undefined
@@ -173,6 +199,9 @@ export const createNewInvoice = async (req, res, next) => {
         ? requestedSalesUserId
         : req.user.userId;
 
+    // =====================================================
+    // COMPANY
+    // =====================================================
     const company = await prisma.company.findUnique({
       where: {
         id: companyId,
@@ -185,6 +214,9 @@ export const createNewInvoice = async (req, res, next) => {
       throw error;
     }
 
+    // =====================================================
+    // OPTIONAL CONTACT
+    // =====================================================
     let contact = null;
 
     if (contactId !== undefined) {
@@ -209,6 +241,9 @@ export const createNewInvoice = async (req, res, next) => {
       }
     }
 
+    // =====================================================
+    // SALES USER
+    // =====================================================
     const salesUser = await prisma.user.findUnique({
       where: {
         id: salesUserId,
@@ -221,11 +256,30 @@ export const createNewInvoice = async (req, res, next) => {
       throw error;
     }
 
+    // =====================================================
+    // CREATE DIRECT INVOICE
+    // =====================================================
     const newDirectInvoice = await prisma.invoice.create({
       data: {
-        companyId,
-        contactId: contact?.id ?? null,
-        salesUserId,
+        company: {
+          connect: {
+            id: company.id,
+          },
+        },
+
+        ...(contact !== null && {
+          contact: {
+            connect: {
+              id: contact.id,
+            },
+          },
+        }),
+
+        salesUser: {
+          connect: {
+            id: salesUser.id,
+          },
+        },
 
         companyName: company.name,
         contactName: contact?.name ?? null,
@@ -260,14 +314,8 @@ export const updateInvoice = async (req, res, next) => {
       throw error;
     }
 
-    const {
-      description,
-      amount,
-      companyId,
-      contactId,
-      salesUserId,
-      status,
-    } = result.data;
+    const { description, amount, companyId, contactId, salesUserId, status } =
+      result.data;
 
     if (req.user.role !== "ADMIN" && salesUserId !== undefined) {
       const error = new Error("Only admins can reassign an invoice.");
@@ -287,13 +335,10 @@ export const updateInvoice = async (req, res, next) => {
       throw error;
     }
 
-    const effectiveCompanyId =
-      companyId ?? existingInvoice.companyId;
+    const effectiveCompanyId = companyId ?? existingInvoice.companyId;
 
     const effectiveContactId =
-      contactId !== undefined
-        ? contactId
-        : existingInvoice.contactId;
+      contactId !== undefined ? contactId : existingInvoice.contactId;
 
     const invoiceUpdates = {
       description,

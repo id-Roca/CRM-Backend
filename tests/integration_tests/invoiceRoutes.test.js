@@ -204,7 +204,14 @@ describe("POST /api/invoices", () => {
     expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({
       where: { id: 5 }, include: { company: true, contact: true, salesUser: true },
     });
-    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data });
+    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({
+      data: {
+        offer: { connect: { id: 5 } }, company: { connect: { id: 1 } },
+        contact: { connect: { id: 2 } }, salesUser: { connect: { id: 3 } },
+        companyName: "Acme Corp", contactName: "Test Contact", salesUserName: "Assigned User",
+        description: "Accepted consulting", amount: 500,
+      },
+    });
     expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
   });
 
@@ -227,7 +234,14 @@ describe("POST /api/invoices", () => {
         .expect("Content-Type", /json/)
         .expect(201);
       expect(response.body).toEqual({ id, ...data });
-      expect(mockPrisma.invoice.create).toHaveBeenNthCalledWith(id, { data });
+      expect(mockPrisma.invoice.create).toHaveBeenNthCalledWith(id, {
+        data: {
+          offer: { connect: { id: 5 } }, company: { connect: { id: 1 } },
+          salesUser: { connect: { id: 3 } },
+          companyName: "Acme Corp", contactName: null, salesUserName: "Assigned User",
+          description: "Accepted consulting", amount: 500,
+        },
+      });
     }
     expect(mockPrisma.invoice.create).toHaveBeenCalledTimes(2);
   });
@@ -250,7 +264,13 @@ describe("POST /api/invoices", () => {
     expect(mockPrisma.company.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 10 } });
     expect(mockPrisma.contact.findUnique).not.toHaveBeenCalled();
-    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data });
+    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({
+      data: {
+        company: { connect: { id: 1 } }, salesUser: { connect: { id: 10 } },
+        companyName: "Acme Corp", contactName: null, salesUserName: "Logged-in User",
+        description: "Consulting invoice", amount: 250,
+      },
+    });
   });
 
   test("creates a direct invoice without contact assigned to the authenticated ADMIN", async () => {
@@ -271,7 +291,13 @@ describe("POST /api/invoices", () => {
     expect(mockPrisma.company.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 10 } });
     expect(mockPrisma.contact.findUnique).not.toHaveBeenCalled();
-    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data });
+    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({
+      data: {
+        company: { connect: { id: 1 } }, salesUser: { connect: { id: 10 } },
+        companyName: "Acme Corp", contactName: null, salesUserName: "Logged-in User",
+        description: "Consulting invoice", amount: 250,
+      },
+    });
   });
 
   test("allows ADMIN to assign another user and a matching contact", async () => {
@@ -291,7 +317,14 @@ describe("POST /api/invoices", () => {
     expect(response.body).toEqual({ id: 1, ...data });
     expect(mockPrisma.contact.findUnique).toHaveBeenCalledWith({ where: { id: 2 } });
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 3 } });
-    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({ data });
+    expect(mockPrisma.invoice.create).toHaveBeenCalledWith({
+      data: {
+        company: { connect: { id: 1 } }, contact: { connect: { id: 2 } },
+        salesUser: { connect: { id: 3 } },
+        companyName: "Acme Corp", contactName: "Test Contact", salesUserName: "Assigned User",
+        description: "Consulting invoice", amount: 250,
+      },
+    });
   });
 
   test("rejects a non-accepted Offer", async () => {
@@ -675,4 +708,3 @@ describe("DELETE /api/invoices/:id", () => {
   });
 
 });
-
