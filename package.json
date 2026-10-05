@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "start": "node --env-file=.env src/server.js",
-    "seed": "node --env-file=.env prisma/seed.js"
+    "seed": "node --env-file=.env prisma/seed.js",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",
