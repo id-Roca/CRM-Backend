@@ -11,6 +11,8 @@ import invoceRoutes from "./routes/invoiceRoutes.js";
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 const apiLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 100,
