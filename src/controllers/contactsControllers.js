@@ -2,7 +2,7 @@ import prisma from "../prisma.js";
 import { z } from "zod";
 
 const createContactSchema = z.object({
-  name: z.string().min(3, "Name must be at least 3 characters").max(25),
+  name: z.string().min(3, "Name must be at least 3 characters.").max(25),
   email: z.string().email("Invalid email address.").max(100), // z.string().z.email() <- older version. will soon not be supported any longer
   companyId: z.number().int().positive(),
 });
@@ -11,7 +11,7 @@ const updateContactSchema = z
   .object({
     name: z
       .string()
-      .min(3, "Name must be at least 3 characters")
+      .min(3, "Name must be at least 3 characters.")
       .max(25)
       .optional(),
     email: z.email("Invalid email address").max(100).optional(),
@@ -20,6 +20,13 @@ const updateContactSchema = z
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field is required.",
   });
+
+const contactsIdSchema = z.coerce
+  .number({
+    error: "Contact ID must be a number.",
+  })
+  .int()
+  .positive("Contact ID must be a positive number.");
 
 //  GET all
 export const getAllContacts = async (req, res, next) => {
@@ -38,17 +45,17 @@ export const getAllContacts = async (req, res, next) => {
 // GET by specific ID
 export const getContactsById = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
+    const id = contactsIdSchema.safeParse(req.params.id);
 
-    if (Number.isNaN(id)) {
-      const error = new Error("Contact ID must be a number");
+    if (!id.success) {
+      const error = new Error(id.error.issues[0].message);
       error.statusCode = 400;
       throw error;
     }
 
     const contact = await prisma.contact.findUnique({
       where: {
-        id: Number(req.params.id),
+        id: id.data,
       },
     });
 
@@ -105,11 +112,11 @@ export const updateContact = async (req, res, next) => {
       error.statusCode = 400;
       throw error;
     }
-    const id = Number(req.params.id);
+    const id = contactsIdSchema.safeParse(req.params.id);
 
     // Validate contact ID from URL
-    if (Number.isNaN(id)) {
-      const error = new Error("Contact ID must be a number");
+    if (!id.success) {
+      const error = new Error(id.error.issues[0].message);
       error.statusCode = 400;
       throw error;
     }
@@ -118,7 +125,7 @@ export const updateContact = async (req, res, next) => {
 
     const updatedContact = await prisma.contact.update({
       where: {
-        id,
+        id: id.data,
       },
       data: {
         name,
@@ -155,15 +162,14 @@ export const updateContact = async (req, res, next) => {
 
 export const deleteContact = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-
-    if (Number.isNaN(id)) {
-      const error = new Error("Contact ID must be a number");
+    const id = contactsIdSchema.safeParse(req.params.id);
+    if (!id.success) {
+      const error = new Error(id.error.issues[0].message);
       error.statusCode = 400;
       throw error;
     }
 
-    await prisma.contact.delete({ where: { id } });
+    await prisma.contact.delete({ where: { id: id.data } });
 
     res.status(204).end();
   } catch (err) {

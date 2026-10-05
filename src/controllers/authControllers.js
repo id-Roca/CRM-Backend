@@ -5,7 +5,7 @@ import { z } from "zod";
 
 const loginSchema = z.object({
   email: z.email("Invalid email address.").max(100),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: z.string().min(6, "Password must be at least 6 characters."),
 });
 
 export const login = async (req, res, next) => {
@@ -14,7 +14,7 @@ export const login = async (req, res, next) => {
 
     if (!result.success) {
       const error = new Error(result.error.issues[0].message);
-      error.statusCode = 401;
+      error.statusCode = 400;
       throw error;
     }
 
@@ -24,7 +24,7 @@ export const login = async (req, res, next) => {
       where: { email },
     });
     if (!user) {
-      const error = new Error("Invalid credentials")
+      const error = new Error("Invalid credentials.");
       error.statusCode = 401;
       throw error;
     }
@@ -32,7 +32,7 @@ export const login = async (req, res, next) => {
     const passwordMatches = await bcrypt.compare(password, user.passwordHash);
 
     if (!passwordMatches) {
-      const error = new Error("Invalid credentials");
+      const error = new Error("Invalid credentials.");
       error.statusCode = 401;
       throw error;
     }
@@ -49,7 +49,7 @@ export const login = async (req, res, next) => {
     );
 
     res.json({
-      message: "Login successful",
+      message: "Login successful.",
       token,
       user: {
         id: user.id,

@@ -5,7 +5,7 @@ import {
   createNewContact,
   updateContact,
   deleteContact,
-} from "../contactsControllers/contactsControllers.js";
+} from "../controllers/contactsControllers.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 import { authorizeRoles } from "../middleware/autorizeRoles.js";
 

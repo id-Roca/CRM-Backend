@@ -5,7 +5,7 @@ import {
   createNewCompany,
   updateCompany,
   deleteCompany,
-} from "../companyControllers/companyControllers.js";
+} from "../controllers/companyControllers.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 import { authorizeRoles } from "../middleware/autorizeRoles.js";
 

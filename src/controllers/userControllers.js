@@ -27,6 +27,13 @@ const updateUserSchema = z
     message: "At least one field is required.",
   });
 
+const userIdSchema = z.coerce
+  .number({
+    error: "User ID must be a number.",
+  })
+  .int()
+  .positive();
+
 // GET all users
 export const getAllUsers = async (req, res, next) => {
   try {
@@ -51,15 +58,15 @@ export const getAllUsers = async (req, res, next) => {
 // GET users by ID
 export const getUsersById = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    if (Number.isNaN(id)) {
-      const error = new Error("User ID must be a number.");
+    const id = userIdSchema.safeParse(req.params.id);
+    if (!id.success) {
+      const error = new Error(id.error.issues[0].message);
       error.statusCode = 400;
       throw error;
     }
 
     const user = await prisma.user.findUnique({
-      where: { id },
+      where: { id: id.data },
       select: {
         id: true,
         name: true,
@@ -113,7 +120,7 @@ export const createUser = async (req, res, next) => {
   } catch (error) {
     if (error.code === "P2002") {
       error.statusCode = 409;
-      error.message = "A user with this email already exists";
+      error.message = "A user with this email already exists.";
     }
     next(error);
   }
@@ -131,9 +138,9 @@ export const updateUser = async (req, res, next) => {
       throw error;
     }
 
-    const id = Number(req.params.id);
-    if (Number.isNaN(id)) {
-      const error = new Error("User ID must be a number.");
+    const id = userIdSchema.safeParse(req.params.id);
+    if (!id.success) {
+      const error = new Error(id.error.issues[0].message);
       error.statusCode = 400;
       throw error;
     }
@@ -151,7 +158,7 @@ export const updateUser = async (req, res, next) => {
     }
 
     const updatedUser = await prisma.user.update({
-      where: { id },
+      where: { id: id.data },
       data,
       select: {
         id: true,
@@ -165,7 +172,12 @@ export const updateUser = async (req, res, next) => {
   } catch (error) {
     if (error.code === "P2025") {
       error.statusCode = 404;
-      error.message = "User not found";
+      error.message = "User not found.";
+    }
+
+    if (error.code === "P2002") {
+      error.statusCode = 409;
+      error.message = "A user with this email already exists.";
     }
     next(error);
   }
@@ -175,15 +187,15 @@ export const updateUser = async (req, res, next) => {
 
 export const deleteUser = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
-    if (Number.isNaN(id)) {
-      const error = new Error("User ID must be a number.");
+    const id = userIdSchema.safeParse(req.params.id);
+    if (!id.success) {
+      const error = new Error(id.error.issues[0].message);
       error.statusCode = 400;
       throw error;
     }
 
     await prisma.user.delete({
-      where: { id },
+      where: { id: id.data },
     });
     res.status(204).end();
   } catch (error) {

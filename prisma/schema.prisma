@@ -18,6 +18,8 @@ model Company {
   name     String    @unique
   industry String
   contacts Contact[]
+  offers   Offer[]
+   invoices Invoice[]
 }
 
 model Contact {
@@ -26,6 +28,8 @@ model Contact {
   email     String  @unique
   companyId Int
   company   Company @relation(fields: [companyId], references: [id])
+  offers    Offer[]
+   invoices Invoice[]
 }
 
 enum Role {
@@ -41,4 +45,67 @@ model User {
   passwordHash String
   role         Role     @default(SALES)
   createdAt    DateTime @default(now())
+  offers       Offer[]
+   invoices Invoice[]
+   
+}
+
+enum OfferStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+model Offer {
+  id          Int         @id @default(autoincrement())
+  description String
+  amount      Decimal
+  status      OfferStatus @default(DRAFT)
+
+  companyId   Int
+  contactId   Int?
+  salesUserId Int
+
+  company   Company @relation(fields: [companyId], references: [id])
+  contact   Contact? @relation(fields: [contactId], references: [id])
+  salesUser User    @relation(fields: [salesUserId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  invoices     Invoice[]
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  CANCELLED
+}
+
+model Invoice {
+  id Int @id @default(autoincrement())
+
+  offerId Int?
+  offer   Offer? @relation(fields: [offerId], references: [id])
+
+  companyId   Int
+  contactId   Int?
+  salesUserId Int
+
+  company   Company @relation(fields: [companyId], references: [id])
+  contact   Contact? @relation(fields: [contactId], references: [id])
+  salesUser User    @relation(fields: [salesUserId], references: [id])
+
+  companyName   String
+  contactName   String
+  salesUserName String
+
+  description String
+  amount      Decimal
+  status      InvoiceStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

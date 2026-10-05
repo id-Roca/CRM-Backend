@@ -2,25 +2,32 @@ import prisma from "../prisma.js";
 import { z } from "zod";
 
 const createCompanySchema = z.object({
-  name: z.string().min(3, "Name must be at least 3 characters").max(50),
-  industry: z.string().min(3, "Industry must be at least 3 characters"),
+  name: z.string().min(3, "Name must be at least 3 characters.").max(50),
+  industry: z.string().min(3, "Industry must be at least 3 characters."),
 });
 
 const updateCompanySchema = z
   .object({
     name: z
       .string()
-      .min(3, "Name must be at least 3 characters")
+      .min(3, "Name must be at least 3 characters.")
       .max(50)
       .optional(),
     industry: z
       .string()
-      .min(3, "Industry must be at least 3 characters")
+      .min(3, "Industry must be at least 3 characters.")
       .optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field is required.",
   });
+
+const companyIdSchema = z.coerce
+  .number({
+    error: "Company ID must be a number.",
+  })
+  .int()
+  .positive("Company ID must be a positive number.");
 
 export const getAllCompanies = async (req, res, next) => {
   try {
@@ -37,16 +44,16 @@ export const getAllCompanies = async (req, res, next) => {
 
 export const getCompaniesById = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
+    const id = companyIdSchema.safeParse(req.params.id);
 
-    if (Number.isNaN(id)) {
-      const error = new Error("Company ID must be a number");
+    if (!id.success) {
+      const error = new Error(id.error.issues[0].message);
       error.statusCode = 400;
       throw error;
     }
     const company = await prisma.company.findUnique({
       where: {
-        id: Number(req.params.id),
+        id: id.data,
       },
     });
 
@@ -82,6 +89,11 @@ export const createNewCompany = async (req, res, next) => {
 
     res.status(201).json(newCompany);
   } catch (error) {
+    if (error.code === "P2002") {
+      error.statusCode = 409;
+      error.message = "A company with this name already exists.";
+    }
+
     next(error);
   }
 };
@@ -95,11 +107,11 @@ export const updateCompany = async (req, res, next) => {
       throw error;
     }
 
-    const id = Number(req.params.id);
+    const id = companyIdSchema.safeParse(req.params.id)
 
-    // Validate company ID from URL
-    if (Number.isNaN(id)) {
-      const error = new Error("Company ID must be a number");
+    // Validate company ID from URL with zod
+    if (!id.success) {
+      const error = new Error(id.error.issues[0].message);
       error.statusCode = 400;
       throw error;
     }
@@ -108,7 +120,7 @@ export const updateCompany = async (req, res, next) => {
 
     const updatedCompany = await prisma.company.update({
       where: {
-        id,
+        id: id.data
       },
       data: {
         name,
@@ -118,6 +130,11 @@ export const updateCompany = async (req, res, next) => {
 
     res.json(updatedCompany);
   } catch (error) {
+    if (error.code === "P2002") {
+      error.statusCode = 409;
+      error.message = "A company with this name already exists.";
+    }
+
     if (error.code === "P2025") {
       error.statusCode = 404;
       error.message = "No record was found for an update.";
@@ -129,26 +146,26 @@ export const updateCompany = async (req, res, next) => {
 
 export const deleteCompany = async (req, res, next) => {
   try {
-    const id = Number(req.params.id);
+    const id = companyIdSchema.safeParse(req.params.id)
 
-    if (Number.isNaN(id)) {
-      const error = new Error("Company ID must be a number");
+    if (!id.success) {
+      const error = new Error(id.error.issues[0].message);
       error.statusCode = 400;
       throw error;
     }
 
-    await prisma.company.delete({ where: { id } });
+    await prisma.company.delete({ where: { id: id.data } });
 
     res.status(204).end();
   } catch (err) {
     if (err.code === "P2025") {
       err.statusCode = 404;
-      err.message = "Company not found";
+      err.message = "Company not found.";
     }
 
     if (err.code === "P2003") {
       err.statusCode = 409;
-      err.message = "Cannot delete a company that still has contacts";
+      err.message = "Cannot delete a company that still has contacts.";
     }
 
     next(err);

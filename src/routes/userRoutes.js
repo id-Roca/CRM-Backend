@@ -5,7 +5,7 @@ import {
   createUser,
   updateUser,
   deleteUser,
-} from "../userControllers/userControllers.js";
+} from "../controllers/userControllers.js";
 import { authenticateToken } from "../middleware/authMiddleware.js";
 import { authorizeRoles } from "../middleware/autorizeRoles.js";
 

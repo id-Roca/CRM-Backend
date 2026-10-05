@@ -1,0 +1,981 @@
+import {
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  jest,
+  test,
+} from "@jest/globals";
+
+import request from "supertest";
+
+const mockPrisma = {
+  contact: { findUnique: jest.fn() },
+  user: { findUnique: jest.fn() },
+  offer: {
+    findMany: jest.fn(),
+    findUnique: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+  },
+};
+
+jest.unstable_mockModule("../../src/prisma.js", () => ({
+  default: mockPrisma,
+}));
+
+const mockJwt = {
+  verify: jest.fn(),
+};
+
+jest.unstable_mockModule("jsonwebtoken", () => ({
+  default: mockJwt,
+}));
+
+let app;
+
+beforeAll(async () => {
+  ({ default: app } = await import("../../src/app.js"));
+});
+
+beforeEach(() => {
+  jest.resetAllMocks();
+});
+
+describe("GET /api/offers", () => {
+  test("returns offers for an authenticated admin user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "ADMIN" });
+    const offers = [{ id: 1, description: "Consulting offer", amount: 250, status: "DRAFT" }];
+    mockPrisma.offer.findMany.mockResolvedValueOnce(offers);
+
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offers);
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
+  });
+
+  test("returns offers for an authenticated sales user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    const offers = [{ id: 1, description: "Consulting offer", amount: 250, status: "DRAFT" }];
+    mockPrisma.offer.findMany.mockResolvedValueOnce(offers);
+
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offers);
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
+  });
+
+  test("returns offers for an authenticated support user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SUPPORT" });
+    const offers = [{ id: 1, description: "Consulting offer", amount: 250, status: "DRAFT" }];
+    mockPrisma.offer.findMany.mockResolvedValueOnce(offers);
+
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offers);
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
+  });
+
+  test("returns 401 when no authentication token is provided", async () => {
+
+    const response = await request(app)
+      .get("/api/offers")
+      .expect("Content-Type", /json/)
+      .expect(401);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Authentification required.",
+    });
+    expect(mockJwt.verify).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 401 when the token is invalid or expired", async () => {
+    mockJwt.verify.mockImplementationOnce(() => {
+      throw new Error("jwt expired");
+    });
+
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer invalid-token")
+      .expect("Content-Type", /json/)
+      .expect(401);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Invalid or expired token",
+    });
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 500 when the database request fails", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    mockPrisma.offer.findMany.mockRejectedValueOnce(new Error("Database connection failed"));
+
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .expect("Content-Type", /json/)
+      .expect(500);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Database connection failed",
+    });
+  });
+});
+
+describe("GET /api/offers/:id", () => {
+  test("returns one offer for an authenticated admin user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "ADMIN" });
+    const offer = { id: 1, description: "Consulting offer", amount: 250, status: "DRAFT" };
+    mockPrisma.offer.findUnique.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .get("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+  });
+
+  test("returns one offer for an authenticated sales user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    const offer = { id: 1, description: "Consulting offer", amount: 250, status: "DRAFT" };
+    mockPrisma.offer.findUnique.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .get("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+  });
+
+  test("returns one offer for an authenticated support user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SUPPORT" });
+    const offer = { id: 1, description: "Consulting offer", amount: 250, status: "DRAFT" };
+    mockPrisma.offer.findUnique.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .get("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+  });
+
+  test("returns 400 when the offer ID is invalid", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+
+    const response = await request(app)
+      .get("/api/offers/banana")
+      .set("Authorization", "Bearer dummy-token")
+      .expect("Content-Type", /json/)
+      .expect(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Offer ID must be a number.",
+    });
+    expect(mockPrisma.offer.findUnique).not.toHaveBeenCalled();
+  });
+
+  test("returns 404 when the offer does not exist", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    mockPrisma.offer.findUnique.mockResolvedValueOnce(null);
+
+    const response = await request(app)
+      .get("/api/offers/999")
+      .set("Authorization", "Bearer dummy-token")
+      .expect("Content-Type", /json/)
+      .expect(404);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Offer not found.",
+    });
+    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({ where: { id: 999 } });
+  });
+
+  test("returns 500 when the database request fails", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    mockPrisma.offer.findUnique.mockRejectedValueOnce(new Error("Database connection failed"));
+
+    const response = await request(app)
+      .get("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .expect("Content-Type", /json/)
+      .expect(500);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Database connection failed",
+    });
+  });
+});
+
+describe("POST /api/offers", () => {
+  test("creates without a contact and assigns the authenticated SALES user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "SALES" });
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: 10 });
+    const offer = { id: 1, contact: null, salesUser: { name: "Current User" } };
+    mockPrisma.offer.create.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1 })
+      .expect("Content-Type", /json/)
+      .expect(201);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { description: "Consulting offer", amount: 250, companyId: 1, contactId: null, salesUserId: 10 } }),
+    );
+    expect(mockPrisma.contact.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 10 } });
+  });
+
+  test("creates without a contact and assigns the authenticated ADMIN user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "ADMIN" });
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: 10 });
+    const offer = { id: 1, contact: null, salesUser: { name: "Current User" } };
+    mockPrisma.offer.create.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1 })
+      .expect("Content-Type", /json/)
+      .expect(201);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { description: "Consulting offer", amount: 250, companyId: 1, contactId: null, salesUserId: 10 } }),
+    );
+    expect(mockPrisma.contact.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 10 } });
+  });
+
+  test("returns 403 when SALES explicitly assigns a sales user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "SALES" });
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1, salesUserId: 10 })
+      .expect("Content-Type", /json/)
+      .expect(403);
+
+    expect(response.body).toEqual({ success: false, message: "Only admins can assign another sales user." });
+    expect(mockPrisma.offer.create).not.toHaveBeenCalled();
+    expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  test("returns 403 when SUPPORT explicitly assigns a sales user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "SUPPORT" });
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1, salesUserId: 10 })
+      .expect("Content-Type", /json/)
+      .expect(403);
+
+    expect(response.body).toEqual({ success: false, message: "Only admins can assign another sales user." });
+    expect(mockPrisma.offer.create).not.toHaveBeenCalled();
+    expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  test("returns 404 when the selected contact is missing", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "ADMIN" });
+    mockPrisma.contact.findUnique.mockResolvedValueOnce(null);
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1, contactId: 2 })
+      .expect("Content-Type", /json/)
+      .expect(404);
+
+    expect(response.body).toEqual({ success: false, message: "Contact not found." });
+    expect(mockPrisma.offer.create).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 when the contact belongs to another company", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "ADMIN" });
+    mockPrisma.contact.findUnique.mockResolvedValueOnce({ id: 2, companyId: 9 });
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1, contactId: 2 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+
+    expect(response.body).toEqual({ success: false, message: "Contact does not belong to the selected company." });
+    expect(mockPrisma.offer.create).not.toHaveBeenCalled();
+  });
+
+  test("returns 404 when the assigned user is missing", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "ADMIN" });
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1, salesUserId: 99 })
+      .expect("Content-Type", /json/)
+      .expect(404);
+
+    expect(response.body).toEqual({ success: false, message: "Sales user not found." });
+    expect(mockPrisma.offer.create).not.toHaveBeenCalled();
+  });
+  beforeEach(() => {
+    mockPrisma.contact.findUnique.mockResolvedValue({ id: 2, companyId: 1 });
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 1 });
+  });
+
+  test("creates an offer for an authenticated admin user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "ADMIN" });
+    mockPrisma.user.findUnique.mockResolvedValueOnce({ id: 3 });
+    const offer = {
+          id: 1,
+          description: "Consulting offer",
+          amount: 250,
+          status: "DRAFT",
+          company: { name: "Acme" },
+          contact: { name: "Anna" },
+          salesUser: { name: "Sales User" },
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        };
+    mockPrisma.offer.create.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1, contactId: 2, salesUserId: 3 })
+      .expect("Content-Type", /json/)
+      .expect(201);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.create).toHaveBeenCalledWith({
+      data: { description: "Consulting offer", amount: 250, companyId: 1, contactId: 2, salesUserId: 3 },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { name: true } },
+        contact: { select: { name: true } },
+        salesUser: { select: { name: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    expect(mockPrisma.contact.findUnique).toHaveBeenCalledWith({ where: { id: 2 } });
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 3 } });
+  });
+
+  test("creates an offer for an authenticated sales user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    const offer = {
+          id: 1,
+          description: "Consulting offer",
+          amount: 250,
+          status: "DRAFT",
+          company: { name: "Acme" },
+          contact: { name: "Anna" },
+          salesUser: { name: "Sales User" },
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        };
+    mockPrisma.offer.create.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1, contactId: 2 })
+      .expect("Content-Type", /json/)
+      .expect(201);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.create).toHaveBeenCalledWith({
+      data: { description: "Consulting offer", amount: 250, companyId: 1, contactId: 2, salesUserId: 1 },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { name: true } },
+        contact: { select: { name: true } },
+        salesUser: { select: { name: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  });
+
+  test("creates an offer for an authenticated support user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SUPPORT" });
+    const offer = {
+          id: 1,
+          description: "Consulting offer",
+          amount: 250,
+          status: "DRAFT",
+          company: { name: "Acme" },
+          contact: { name: "Anna" },
+          salesUser: { name: "Sales User" },
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        };
+    mockPrisma.offer.create.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1, contactId: 2 })
+      .expect("Content-Type", /json/)
+      .expect(201);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.create).toHaveBeenCalledWith({
+      data: { description: "Consulting offer", amount: 250, companyId: 1, contactId: 2, salesUserId: 1 },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { name: true } },
+        contact: { select: { name: true } },
+        salesUser: { select: { name: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  });
+
+  test("returns 400 when the amount is not positive", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 0, companyId: 1, contactId: 2, salesUserId: 3 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Amount must be greater than 0.",
+    });
+    expect(mockPrisma.offer.create).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 when the description is too short", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Hi", amount: 250, companyId: 1, contactId: 2, salesUserId: 3 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Description must be at least 3 characters.",
+    });
+    expect(mockPrisma.offer.create).not.toHaveBeenCalled();
+  });
+
+  test("returns 401 when no authentication token is provided", async () => {
+
+    const response = await request(app)
+      .post("/api/offers")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1, contactId: 2 })
+      .expect("Content-Type", /json/)
+      .expect(401);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Authentification required.",
+    });
+    expect(mockJwt.verify).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.create).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 when a related record does not exist", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    const prismaError = new Error("Database request failed");
+    prismaError.code = "P2003";
+    mockPrisma.offer.create.mockRejectedValueOnce(prismaError);
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1, contactId: 2 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Company or sales user does not exist.",
+    });
+  });
+
+  test("returns 500 when the database request fails", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    mockPrisma.offer.create.mockRejectedValueOnce(new Error("Database connection failed"));
+
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Consulting offer", amount: 250, companyId: 1, contactId: 2 })
+      .expect("Content-Type", /json/)
+      .expect(500);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Database connection failed",
+    });
+  });
+});
+
+describe("PATCH /api/offers/:id", () => {
+  test("returns 403 when SALES tries to reassign an offer", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "SALES" });
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ salesUserId: 10 })
+      .expect("Content-Type", /json/)
+      .expect(403);
+
+    expect(response.body).toEqual({ success: false, message: "Only admins can reassign an offer." });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findUnique).not.toHaveBeenCalled();
+  });
+
+  test("returns 403 when SUPPORT tries to reassign an offer", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "SUPPORT" });
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ salesUserId: 10 })
+      .expect("Content-Type", /json/)
+      .expect(403);
+
+    expect(response.body).toEqual({ success: false, message: "Only admins can reassign an offer." });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findUnique).not.toHaveBeenCalled();
+  });
+
+  test("preserves the assignee when an ADMIN omits salesUserId", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "ADMIN" });
+    const offer = { id: 1, amount: 500, salesUser: { name: "Existing User" } };
+    mockPrisma.offer.update.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ amount: 500 })
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { description: undefined, amount: 500, companyId: undefined, contactId: undefined, salesUserId: undefined, status: undefined } }),
+    );
+    expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
+  });
+
+  test("returns 404 when the initial offer lookup finds nothing", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "ADMIN" });
+    mockPrisma.offer.findUnique.mockResolvedValueOnce(null);
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ status: "SENT" })
+      .expect("Content-Type", /json/)
+      .expect(404);
+
+    expect(response.body).toEqual({ success: false, message: "Offer not found." });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+  });
+
+  test("returns 404 when the reassigned user is missing", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "ADMIN" });
+    mockPrisma.user.findUnique.mockResolvedValueOnce(null);
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ salesUserId: 99 })
+      .expect("Content-Type", /json/)
+      .expect(404);
+
+    expect(response.body).toEqual({ success: false, message: "Sales user not found." });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+  });
+
+  test("returns 404 when the new contact is missing", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "ADMIN" });
+    mockPrisma.contact.findUnique.mockResolvedValueOnce(null);
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ contactId: 7 })
+      .expect("Content-Type", /json/)
+      .expect(404);
+
+    expect(response.body).toEqual({ success: false, message: "Contact not found." });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 when a new contact belongs to another company", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "ADMIN" });
+    mockPrisma.contact.findUnique.mockResolvedValueOnce({ id: 7, companyId: 9 });
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ contactId: 7 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+
+    expect(response.body).toEqual({ success: false, message: "Contact does not belong to the selected company." });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 when a company change conflicts with the retained contact", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "ADMIN" });
+    mockPrisma.offer.findUnique.mockResolvedValueOnce({ id: 1, companyId: 1, contactId: 2, salesUserId: 3 });
+    mockPrisma.contact.findUnique.mockResolvedValueOnce({ id: 2, companyId: 1 });
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ companyId: 4 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+
+    expect(response.body).toEqual({ success: false, message: "Contact does not belong to the selected company." });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+    expect(mockPrisma.contact.findUnique).toHaveBeenCalledWith({ where: { id: 2 } });
+  });
+
+  test("accepts a new contact belonging to the existing company", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "ADMIN" });
+    mockPrisma.contact.findUnique.mockResolvedValueOnce({ id: 7, companyId: 1 });
+    const offer = { id: 1, contact: { name: "New Contact" } };
+    mockPrisma.offer.update.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ contactId: 7 })
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { description: undefined, amount: undefined, companyId: undefined, contactId: 7, salesUserId: undefined, status: undefined } }),
+    );
+  });
+
+  test("accepts CANCELLED as an offer status", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 10, role: "SALES" });
+    const offer = { id: 1, status: "CANCELLED" };
+    mockPrisma.offer.update.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ status: "CANCELLED" })
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { description: undefined, amount: undefined, companyId: undefined, contactId: undefined, salesUserId: undefined, status: "CANCELLED" } }),
+    );
+  });
+  beforeEach(() => {
+    mockPrisma.offer.findUnique.mockResolvedValue({
+      id: 1, companyId: 1, contactId: null, salesUserId: 3,
+    });
+    mockPrisma.contact.findUnique.mockResolvedValue({ id: 5, companyId: 4 });
+    mockPrisma.user.findUnique.mockResolvedValue({ id: 6 });
+  });
+
+  test("updates an offer for an authenticated admin user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "ADMIN" });
+    const offer = {
+          id: 1,
+          description: "Updated offer",
+          amount: 500,
+          status: "SENT",
+          company: { name: "Acme" },
+          contact: { name: "Anna" },
+          salesUser: { name: "Sales User" },
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        };
+    mockPrisma.offer.update.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ description: "Updated offer", amount: 500, companyId: 4, contactId: 5, salesUserId: 6, status: "SENT" })
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { description: "Updated offer", amount: 500, companyId: 4, contactId: 5, salesUserId: 6, status: "SENT" },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { name: true } },
+        contact: { select: { name: true } },
+        salesUser: { select: { name: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+    expect(mockPrisma.contact.findUnique).toHaveBeenCalledWith({ where: { id: 5 } });
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 6 } });
+  });
+
+  test("updates an offer for an authenticated sales user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    const offer = {
+          id: 1,
+          description: "Consulting offer",
+          amount: 250,
+          status: "SENT",
+          company: { name: "Acme" },
+          contact: { name: "Anna" },
+          salesUser: { name: "Sales User" },
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        };
+    mockPrisma.offer.update.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ status: "SENT" })
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { description: undefined, amount: undefined, companyId: undefined, contactId: undefined, salesUserId: undefined, status: "SENT" },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { name: true } },
+        contact: { select: { name: true } },
+        salesUser: { select: { name: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  });
+
+  test("updates an offer for an authenticated support user", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SUPPORT" });
+    const offer = {
+          id: 1,
+          description: "Consulting offer",
+          amount: 250,
+          status: "SENT",
+          company: { name: "Acme" },
+          contact: { name: "Anna" },
+          salesUser: { name: "Sales User" },
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        };
+    mockPrisma.offer.update.mockResolvedValueOnce(offer);
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ status: "SENT" })
+      .expect("Content-Type", /json/)
+      .expect(200);
+
+    expect(response.body).toEqual(offer);
+    expect(mockPrisma.offer.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { description: undefined, amount: undefined, companyId: undefined, contactId: undefined, salesUserId: undefined, status: "SENT" },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { name: true } },
+        contact: { select: { name: true } },
+        salesUser: { select: { name: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  });
+
+  test("returns 400 when no update fields are provided", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({})
+      .expect("Content-Type", /json/)
+      .expect(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "At least one field is required.",
+    });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 when the amount is invalid", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ amount: -1 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Amount must be greater than 0.",
+    });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 when the offer ID is not positive", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+
+    const response = await request(app)
+      .patch("/api/offers/0")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ status: "SENT" })
+      .expect("Content-Type", /json/)
+      .expect(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Offer ID must be a positive number.",
+    });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+  });
+
+  test("returns 401 when no authentication token is provided", async () => {
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .send({ status: "SENT" })
+      .expect("Content-Type", /json/)
+      .expect(401);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Authentification required.",
+    });
+    expect(mockJwt.verify).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+  });
+
+  test("returns 404 when the offer to update does not exist", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    const prismaError = new Error("Database request failed");
+    prismaError.code = "P2025";
+    mockPrisma.offer.update.mockRejectedValueOnce(prismaError);
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ status: "SENT" })
+      .expect("Content-Type", /json/)
+      .expect(404);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Offer not found.",
+    });
+  });
+
+  test("returns 400 when a related record does not exist", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    const prismaError = new Error("Database request failed");
+    prismaError.code = "P2003";
+    mockPrisma.offer.update.mockRejectedValueOnce(prismaError);
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ companyId: 999 })
+      .expect("Content-Type", /json/)
+      .expect(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Company, contact, or sales user does not exist.",
+    });
+  });
+
+  test("returns 500 when the database request fails", async () => {
+    mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
+    mockPrisma.offer.update.mockRejectedValueOnce(new Error("Database connection failed"));
+
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({ status: "SENT" })
+      .expect("Content-Type", /json/)
+      .expect(500);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: "Database connection failed",
+    });
+  });
+});
