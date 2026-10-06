@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, jest, test } from "@jest/globals";
 
 const mockPrisma = {
-  ticket: { findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
+  ticket: { count: jest.fn(), findMany: jest.fn(), findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
   company: { findUnique: jest.fn() },
   contact: { findUnique: jest.fn() },
   offer: { findUnique: jest.fn() },
@@ -36,23 +36,268 @@ beforeEach(() => {
 });
 
 describe("getAllTickets", () => {
+  beforeEach(() => {
+    mockPrisma.ticket.count.mockResolvedValue(1);
+  });
+
   test("returns tickets ordered by ID", async () => {
     const tickets = [{ id: 1, subject: "Help needed" }];
     mockPrisma.ticket.findMany.mockResolvedValueOnce(tickets);
-    await getAllTickets({}, res, next);
-    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
-    expect(res.json).toHaveBeenCalledWith(tickets);
+    await getAllTickets({ query: {} }, res, next);
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({ where: {}, skip: 0, take: 10, orderBy: { id: "asc" } });
+    expect(res.json).toHaveBeenCalledWith({ data: tickets, page: 1, limit: 10, totalItems: 1, totalPages: 1 });
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {} });
     expect(next).not.toHaveBeenCalled();
   });
 
   test("forwards database errors", async () => {
     const error = new Error("Database failed");
     mockPrisma.ticket.findMany.mockRejectedValueOnce(error);
-    await getAllTickets({}, res, next);
+    await getAllTickets({ query: {} }, res, next);
     expect(next).toHaveBeenCalledWith(error);
     expect(res.json).not.toHaveBeenCalled();
   });
 
+
+  test("uses custom pagination", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":5},{"id":6}];
+    mockPrisma.ticket.count.mockResolvedValueOnce(7);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    await getAllTickets({ query: {"page":"3","limit":"2"} }, res, next);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {}, skip: 4, take: 2, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 3, limit: 2, totalItems: 7, totalPages: 4,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("filters by status", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":1}];
+    mockPrisma.ticket.count.mockResolvedValueOnce(1);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    await getAllTickets({ query: {"status":"OPEN"} }, res, next);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {"status":"OPEN"} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {"status":"OPEN"}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("filters by priority", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":1}];
+    mockPrisma.ticket.count.mockResolvedValueOnce(1);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    await getAllTickets({ query: {"priority":"HIGH"} }, res, next);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {"priority":"HIGH"} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {"priority":"HIGH"}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("filters by assignedUserId", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":1}];
+    mockPrisma.ticket.count.mockResolvedValueOnce(1);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    await getAllTickets({ query: {"assignedUserId":"7"} }, res, next);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {"assignedUserId":7} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {"assignedUserId":7}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("combines all filters with pagination", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":3},{"id":4}];
+    mockPrisma.ticket.count.mockResolvedValueOnce(4);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    await getAllTickets({ query: {"status":"OPEN","priority":"HIGH","assignedUserId":"7","page":"2","limit":"2"} }, res, next);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {"status":"OPEN","priority":"HIGH","assignedUserId":7} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {"status":"OPEN","priority":"HIGH","assignedUserId":7}, skip: 2, take: 2, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 2, limit: 2, totalItems: 4, totalPages: 2,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("returns zero totals when no records match", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [];
+    mockPrisma.ticket.count.mockResolvedValueOnce(0);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    await getAllTickets({ query: {"status":"OPEN","priority":"HIGH","assignedUserId":"7"} }, res, next);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {"status":"OPEN","priority":"HIGH","assignedUserId":7} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {"status":"OPEN","priority":"HIGH","assignedUserId":7}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 1, limit: 10, totalItems: 0, totalPages: 0,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("returns an empty out-of-range page while preserving totals", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [];
+    mockPrisma.ticket.count.mockResolvedValueOnce(3);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    await getAllTickets({ query: {"page":"5","limit":"2"} }, res, next);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {}, skip: 8, take: 2, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 5, limit: 2, totalItems: 3, totalPages: 2,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=0", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllTickets({ query: {"page":"0"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=1.5", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllTickets({ query: {"page":"1.5"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=banana", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllTickets({ query: {"page":"banana"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=0", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllTickets({ query: {"limit":"0"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=-1", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllTickets({ query: {"limit":"-1"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=2.5", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllTickets({ query: {"limit":"2.5"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=banana", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllTickets({ query: {"limit":"banana"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for status=INVALID", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllTickets({ query: {"status":"INVALID"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: "Status must be OPEN, IN_PROGRESS, WAITING, RESOLVED, or CLOSED." }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for assignedUserId=0", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllTickets({ query: {"assignedUserId":"0"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for assignedUserId=banana", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllTickets({ query: {"assignedUserId":"banana"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for priority=INVALID", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllTickets({ query: {"priority":"INVALID"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: "Priority must be LOW, MEDIUM, HIGH, OR URGENT." }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("forwards a count query failure", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const error = new Error("Count failed");
+    mockPrisma.ticket.count.mockRejectedValueOnce(error);
+    await getAllTickets({ query: {} }, res, next);
+    expect(next).toHaveBeenCalledWith(error);
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
 });
 
 describe("getTicketById", () => {
@@ -84,7 +329,7 @@ describe("getTicketById", () => {
     await getTicketById({ params: { id: "0" } }, res, next);
     expect(next).toHaveBeenCalledTimes(1);
     expect(next).toHaveBeenCalledWith(expect.objectContaining({
-      statusCode: 400, message: " Ticket ID must be a positive number.",
+      statusCode: 400, message: "Ticket ID must be a positive number.",
     }));
     expect(res.json).not.toHaveBeenCalled();
     expect(mockPrisma.ticket.findUnique).not.toHaveBeenCalled();
@@ -611,7 +856,7 @@ describe("updateTicket", () => {
     await updateTicket(req, res, next);
     expect(next).toHaveBeenCalledTimes(1);
     expect(next).toHaveBeenCalledWith(expect.objectContaining({
-      statusCode: 400, message: " Ticket ID must be a positive number.",
+      statusCode: 400, message: "Ticket ID must be a positive number.",
     }));
     expect(res.json).not.toHaveBeenCalled();
     expect(mockPrisma.ticket.update).not.toHaveBeenCalled();
@@ -738,4 +983,3 @@ describe("updateTicket", () => {
   });
 
 });
-

@@ -11,6 +11,7 @@ import request from "supertest";
 
 const mockPrisma = {
   ticket: {
+    count: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
     create: jest.fn(),
@@ -53,6 +54,10 @@ const ticketSelect = {
 };
 
 describe("GET /api/tickets", () => {
+  beforeEach(() => {
+    mockPrisma.ticket.count.mockResolvedValue(1);
+  });
+
   test("returns tickets for ADMIN", async () => {
     mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
     const tickets = [{ id: 1, subject: "Help needed", status: "OPEN" }];
@@ -62,8 +67,9 @@ describe("GET /api/tickets", () => {
       .set("Authorization", "Bearer dummy-token")
       .expect("Content-Type", /json/)
       .expect(200);
-    expect(response.body).toEqual(tickets);
-    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
+    expect(response.body).toEqual({ data: tickets, page: 1, limit: 10, totalItems: 1, totalPages: 1 });
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({ where: {}, skip: 0, take: 10, orderBy: { id: "asc" } });
   });
 
   test("returns tickets for SUPPORT", async () => {
@@ -75,8 +81,9 @@ describe("GET /api/tickets", () => {
       .set("Authorization", "Bearer dummy-token")
       .expect("Content-Type", /json/)
       .expect(200);
-    expect(response.body).toEqual(tickets);
-    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
+    expect(response.body).toEqual({ data: tickets, page: 1, limit: 10, totalItems: 1, totalPages: 1 });
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({ where: {}, skip: 0, take: 10, orderBy: { id: "asc" } });
   });
 
   test("returns tickets for SALES", async () => {
@@ -88,8 +95,9 @@ describe("GET /api/tickets", () => {
       .set("Authorization", "Bearer dummy-token")
       .expect("Content-Type", /json/)
       .expect(200);
-    expect(response.body).toEqual(tickets);
-    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
+    expect(response.body).toEqual({ data: tickets, page: 1, limit: 10, totalItems: 1, totalPages: 1 });
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({ where: {}, skip: 0, take: 10, orderBy: { id: "asc" } });
   });
 
   test("requires authentication", async () => {
@@ -100,6 +108,7 @@ describe("GET /api/tickets", () => {
     expect(response.body).toEqual({ success: false, message: "Authentification required." });
     expect(mockJwt.verify).not.toHaveBeenCalled();
     expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
   });
 
   test("rejects an invalid token", async () => {
@@ -111,6 +120,7 @@ describe("GET /api/tickets", () => {
       .expect(401);
     expect(response.body).toEqual({ success: false, message: "Invalid or expired token" });
     expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
   });
 
   test("returns 500 for a database failure", async () => {
@@ -124,6 +134,303 @@ describe("GET /api/tickets", () => {
     expect(response.body).toEqual({ success: false, message: "Database failed" });
   });
 
+
+  test("uses custom pagination", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [{"id":5},{"id":6}];
+    mockPrisma.ticket.count.mockResolvedValueOnce(7);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"page":"3","limit":"2"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {}, skip: 4, take: 2, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 3, limit: 2, totalItems: 7, totalPages: 4,
+    });
+  });
+
+  test("filters by status", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [{"id":1}];
+    mockPrisma.ticket.count.mockResolvedValueOnce(1);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"status":"OPEN"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {"status":"OPEN"} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {"status":"OPEN"}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+  });
+
+  test("filters by priority", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [{"id":1}];
+    mockPrisma.ticket.count.mockResolvedValueOnce(1);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"priority":"HIGH"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {"priority":"HIGH"} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {"priority":"HIGH"}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+  });
+
+  test("filters by assignedUserId", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [{"id":1}];
+    mockPrisma.ticket.count.mockResolvedValueOnce(1);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"assignedUserId":"7"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {"assignedUserId":7} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {"assignedUserId":7}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+  });
+
+  test("combines all filters with pagination", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [{"id":3},{"id":4}];
+    mockPrisma.ticket.count.mockResolvedValueOnce(4);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"status":"OPEN","priority":"HIGH","assignedUserId":"7","page":"2","limit":"2"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {"status":"OPEN","priority":"HIGH","assignedUserId":7} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {"status":"OPEN","priority":"HIGH","assignedUserId":7}, skip: 2, take: 2, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 2, limit: 2, totalItems: 4, totalPages: 2,
+    });
+  });
+
+  test("returns zero totals when no records match", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [];
+    mockPrisma.ticket.count.mockResolvedValueOnce(0);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"status":"OPEN","priority":"HIGH","assignedUserId":"7"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {"status":"OPEN","priority":"HIGH","assignedUserId":7} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {"status":"OPEN","priority":"HIGH","assignedUserId":7}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 1, limit: 10, totalItems: 0, totalPages: 0,
+    });
+  });
+
+  test("returns an empty out-of-range page while preserving totals", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [];
+    mockPrisma.ticket.count.mockResolvedValueOnce(3);
+    mockPrisma.ticket.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"page":"5","limit":"2"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.ticket.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.ticket.findMany).toHaveBeenCalledWith({
+      where: {}, skip: 8, take: 2, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 5, limit: 2, totalItems: 3, totalPages: 2,
+    });
+  });
+
+  test("returns 400 for page=0", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"page":"0"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=1.5", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"page":"1.5"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=banana", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"page":"banana"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=0", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"limit":"0"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=-1", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"limit":"-1"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=2.5", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"limit":"2.5"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=banana", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"limit":"banana"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for status=INVALID", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"status":"INVALID"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: "Status must be OPEN, IN_PROGRESS, WAITING, RESOLVED, or CLOSED." });
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for assignedUserId=0", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"assignedUserId":"0"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for assignedUserId=banana", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"assignedUserId":"banana"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for priority=INVALID", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"priority":"INVALID"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: "Priority must be LOW, MEDIUM, HIGH, OR URGENT." });
+    expect(mockPrisma.ticket.count).not.toHaveBeenCalled();
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
+
+  test("forwards a count query failure", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const error = new Error("Count failed");
+    mockPrisma.ticket.count.mockRejectedValueOnce(error);
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("Authorization", "Bearer dummy-token")
+      .query({})
+      .expect("Content-Type", /json/)
+      .expect(500);
+    expect(response.body).toEqual({ success: false, message: "Count failed" });
+    expect(mockPrisma.ticket.findMany).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/tickets/:id", () => {
@@ -199,7 +506,7 @@ describe("GET /api/tickets/:id", () => {
       .set("Authorization", "Bearer dummy-token")
       .expect("Content-Type", /json/)
       .expect(400);
-    expect(response.body).toEqual({ success: false, message: " Ticket ID must be a positive number." });
+    expect(response.body).toEqual({ success: false, message: "Ticket ID must be a positive number." });
     expect(mockPrisma.ticket.findUnique).not.toHaveBeenCalled();
   });
 
@@ -916,4 +1223,3 @@ describe("DELETE /api/tickets/:id", () => {
   });
 
 });
-

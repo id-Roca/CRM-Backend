@@ -11,6 +11,7 @@ const mockPrisma = {
   contact: { findUnique: jest.fn() },
   user: { findUnique: jest.fn() },
   offer: {
+    count: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
     create: jest.fn(),
@@ -31,34 +32,37 @@ beforeAll(async () => {
 
 describe("getAllOffers", () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    mockPrisma.offer.count.mockResolvedValue(1);
   });
 
   test("returns all offers ordered by ID", async () => {
     const offers = [{ id: 1, description: "Consulting offer", amount: 250, status: "DRAFT", company: { name: "Acme" }, contact: { name: "Anna" }, salesUser: { name: "Sales User" } }];
     mockPrisma.offer.findMany.mockResolvedValue(offers);
 
-    const req = {};
+    const req = { query: {} };
     const res = { json: jest.fn() };
     const next = jest.fn();
 
     await getAllOffers(req, res, next);
 
-    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
-    expect(res.json).toHaveBeenCalledWith(offers);
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({ where: {}, skip: 0, take: 10, orderBy: { id: "asc" } });
+    expect(res.json).toHaveBeenCalledWith({ data: offers, page: 1, limit: 10, totalItems: 1, totalPages: 1 });
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {} });
     expect(next).not.toHaveBeenCalled();
   });
 
   test("returns an empty array when no offers exist", async () => {
     mockPrisma.offer.findMany.mockResolvedValue([]);
+    mockPrisma.offer.count.mockResolvedValueOnce(0);
 
-    const req = {};
+    const req = { query: {} };
     const res = { json: jest.fn() };
     const next = jest.fn();
 
     await getAllOffers(req, res, next);
 
-    expect(res.json).toHaveBeenCalledWith([]);
+    expect(res.json).toHaveBeenCalledWith({ data: [], page: 1, limit: 10, totalItems: 0, totalPages: 0 });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -66,7 +70,7 @@ describe("getAllOffers", () => {
     const databaseError = new Error("Database unavailable");
     mockPrisma.offer.findMany.mockRejectedValue(databaseError);
 
-    const req = {};
+    const req = { query: {} };
     const res = { json: jest.fn() };
     const next = jest.fn();
 
@@ -75,6 +79,256 @@ describe("getAllOffers", () => {
     expect(next).toHaveBeenCalledWith(databaseError);
     expect(databaseError.statusCode).toBeUndefined();
     expect(res.json).not.toHaveBeenCalled();
+  });
+
+  test("uses custom pagination", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":5},{"id":6}];
+    mockPrisma.offer.count.mockResolvedValueOnce(7);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    await getAllOffers({ query: {"page":"3","limit":"2"} }, res, next);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {}, skip: 4, take: 2, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 3, limit: 2, totalItems: 7, totalPages: 4,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("filters by status", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":1}];
+    mockPrisma.offer.count.mockResolvedValueOnce(1);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    await getAllOffers({ query: {"status":"ACCEPTED"} }, res, next);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {"status":"ACCEPTED"} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {"status":"ACCEPTED"}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("filters by companyId", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":1}];
+    mockPrisma.offer.count.mockResolvedValueOnce(1);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    await getAllOffers({ query: {"companyId":"2"} }, res, next);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {"companyId":2} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {"companyId":2}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("filters by salesUserId", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":1}];
+    mockPrisma.offer.count.mockResolvedValueOnce(1);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    await getAllOffers({ query: {"salesUserId":"7"} }, res, next);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {"salesUserId":7} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {"salesUserId":7}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("combines all filters with pagination", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":3},{"id":4}];
+    mockPrisma.offer.count.mockResolvedValueOnce(4);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    await getAllOffers({ query: {"status":"ACCEPTED","companyId":"2","salesUserId":"7","page":"2","limit":"2"} }, res, next);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {"status":"ACCEPTED","companyId":2,"salesUserId":7} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {"status":"ACCEPTED","companyId":2,"salesUserId":7}, skip: 2, take: 2, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 2, limit: 2, totalItems: 4, totalPages: 2,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("returns zero totals when no records match", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [];
+    mockPrisma.offer.count.mockResolvedValueOnce(0);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    await getAllOffers({ query: {"status":"ACCEPTED","companyId":"2","salesUserId":"7"} }, res, next);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {"status":"ACCEPTED","companyId":2,"salesUserId":7} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {"status":"ACCEPTED","companyId":2,"salesUserId":7}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 1, limit: 10, totalItems: 0, totalPages: 0,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("returns an empty out-of-range page while preserving totals", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [];
+    mockPrisma.offer.count.mockResolvedValueOnce(3);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    await getAllOffers({ query: {"page":"5","limit":"2"} }, res, next);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {}, skip: 8, take: 2, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 5, limit: 2, totalItems: 3, totalPages: 2,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=0", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"page":"0"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=1.5", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"page":"1.5"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=banana", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"page":"banana"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=0", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"limit":"0"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=-1", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"limit":"-1"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=2.5", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"limit":"2.5"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=banana", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"limit":"banana"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for status=INVALID", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"status":"INVALID"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: "Status must be DRAFT, SENT, ACCEPTED, REJECTED or CANCELLED." }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for companyId=0", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"companyId":"0"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for companyId=banana", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"companyId":"banana"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for salesUserId=0", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"salesUserId":"0"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for salesUserId=banana", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ query: {"salesUserId":"banana"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("forwards a count query failure", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const error = new Error("Count failed");
+    mockPrisma.offer.count.mockRejectedValueOnce(error);
+    await getAllOffers({ query: {} }, res, next);
+    expect(next).toHaveBeenCalledWith(error);
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
   });
 });
 

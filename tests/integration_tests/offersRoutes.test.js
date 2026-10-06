@@ -13,6 +13,7 @@ const mockPrisma = {
   contact: { findUnique: jest.fn() },
   user: { findUnique: jest.fn() },
   offer: {
+    count: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
     create: jest.fn(),
@@ -43,6 +44,10 @@ beforeEach(() => {
 });
 
 describe("GET /api/offers", () => {
+  beforeEach(() => {
+    mockPrisma.offer.count.mockResolvedValue(1);
+  });
+
   test("returns offers for an authenticated admin user", async () => {
     mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "ADMIN" });
     const offers = [{ id: 1, description: "Consulting offer", amount: 250, status: "DRAFT" }];
@@ -54,8 +59,9 @@ describe("GET /api/offers", () => {
       .expect("Content-Type", /json/)
       .expect(200);
 
-    expect(response.body).toEqual(offers);
-    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
+    expect(response.body).toEqual({ data: offers, page: 1, limit: 10, totalItems: 1, totalPages: 1 });
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({ where: {}, skip: 0, take: 10, orderBy: { id: "asc" } });
   });
 
   test("returns offers for an authenticated sales user", async () => {
@@ -69,8 +75,9 @@ describe("GET /api/offers", () => {
       .expect("Content-Type", /json/)
       .expect(200);
 
-    expect(response.body).toEqual(offers);
-    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
+    expect(response.body).toEqual({ data: offers, page: 1, limit: 10, totalItems: 1, totalPages: 1 });
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({ where: {}, skip: 0, take: 10, orderBy: { id: "asc" } });
   });
 
   test("returns offers for an authenticated support user", async () => {
@@ -84,8 +91,9 @@ describe("GET /api/offers", () => {
       .expect("Content-Type", /json/)
       .expect(200);
 
-    expect(response.body).toEqual(offers);
-    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
+    expect(response.body).toEqual({ data: offers, page: 1, limit: 10, totalItems: 1, totalPages: 1 });
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({ where: {}, skip: 0, take: 10, orderBy: { id: "asc" } });
   });
 
   test("returns 401 when no authentication token is provided", async () => {
@@ -101,6 +109,7 @@ describe("GET /api/offers", () => {
     });
     expect(mockJwt.verify).not.toHaveBeenCalled();
     expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
   });
 
   test("returns 401 when the token is invalid or expired", async () => {
@@ -119,6 +128,7 @@ describe("GET /api/offers", () => {
       message: "Invalid or expired token",
     });
     expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
   });
 
   test("returns 500 when the database request fails", async () => {
@@ -135,6 +145,316 @@ describe("GET /api/offers", () => {
       success: false,
       message: "Database connection failed",
     });
+  });
+
+  test("uses custom pagination", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [{"id":5},{"id":6}];
+    mockPrisma.offer.count.mockResolvedValueOnce(7);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"page":"3","limit":"2"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {}, skip: 4, take: 2, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 3, limit: 2, totalItems: 7, totalPages: 4,
+    });
+  });
+
+  test("filters by status", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [{"id":1}];
+    mockPrisma.offer.count.mockResolvedValueOnce(1);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"status":"ACCEPTED"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {"status":"ACCEPTED"} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {"status":"ACCEPTED"}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+  });
+
+  test("filters by companyId", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [{"id":1}];
+    mockPrisma.offer.count.mockResolvedValueOnce(1);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"companyId":"2"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {"companyId":2} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {"companyId":2}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+  });
+
+  test("filters by salesUserId", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [{"id":1}];
+    mockPrisma.offer.count.mockResolvedValueOnce(1);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"salesUserId":"7"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {"salesUserId":7} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {"salesUserId":7}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+  });
+
+  test("combines all filters with pagination", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [{"id":3},{"id":4}];
+    mockPrisma.offer.count.mockResolvedValueOnce(4);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"status":"ACCEPTED","companyId":"2","salesUserId":"7","page":"2","limit":"2"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {"status":"ACCEPTED","companyId":2,"salesUserId":7} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {"status":"ACCEPTED","companyId":2,"salesUserId":7}, skip: 2, take: 2, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 2, limit: 2, totalItems: 4, totalPages: 2,
+    });
+  });
+
+  test("returns zero totals when no records match", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [];
+    mockPrisma.offer.count.mockResolvedValueOnce(0);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"status":"ACCEPTED","companyId":"2","salesUserId":"7"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {"status":"ACCEPTED","companyId":2,"salesUserId":7} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {"status":"ACCEPTED","companyId":2,"salesUserId":7}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 1, limit: 10, totalItems: 0, totalPages: 0,
+    });
+  });
+
+  test("returns an empty out-of-range page while preserving totals", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const data = [];
+    mockPrisma.offer.count.mockResolvedValueOnce(3);
+    mockPrisma.offer.findMany.mockResolvedValueOnce(data);
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"page":"5","limit":"2"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.offer.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.offer.findMany).toHaveBeenCalledWith({
+      where: {}, skip: 8, take: 2, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual({
+      data, page: 5, limit: 2, totalItems: 3, totalPages: 2,
+    });
+  });
+
+  test("returns 400 for page=0", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"page":"0"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=1.5", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"page":"1.5"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=banana", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"page":"banana"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=0", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"limit":"0"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=-1", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"limit":"-1"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=2.5", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"limit":"2.5"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=banana", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"limit":"banana"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for status=INVALID", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"status":"INVALID"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: "Status must be DRAFT, SENT, ACCEPTED, REJECTED or CANCELLED." });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for companyId=0", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"companyId":"0"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for companyId=banana", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"companyId":"banana"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for salesUserId=0", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"salesUserId":"0"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for salesUserId=banana", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"salesUserId":"banana"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+  });
+
+  test("forwards a count query failure", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
+    const error = new Error("Count failed");
+    mockPrisma.offer.count.mockRejectedValueOnce(error);
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({})
+      .expect("Content-Type", /json/)
+      .expect(500);
+    expect(response.body).toEqual({ success: false, message: "Count failed" });
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
   });
 });
 

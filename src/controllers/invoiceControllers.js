@@ -42,15 +42,53 @@ const invoiceIdSchema = z.coerce
   .int()
   .positive("invoice ID must be a positive number.");
 
+const invoiceFilterSchema = z.object({
+  status: z
+    .enum(["DRAFT", "ISSUED", "PAID", "CANCELLED"], {
+      error: "Status must be DRAFT, ISSUED, PAID or CANCELLED.",
+    })
+    .optional(),
+  companyId: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().default(10),
+});
+
 export const getAllInvoices = async (req, res, next) => {
   try {
+    const result = invoiceFilterSchema.safeParse(req.query);
+    if (!result.success) {
+      const error = new Error(result.error.issues[0].message);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const { status, companyId, page, limit } = result.data;
+    const skip = (page - 1) * limit;
+    const where = {
+      ...(status && { status }),
+      ...(companyId && { companyId }),
+    };
+
+    const totalItems = await prisma.invoice.count({where});
+
     const invoices = await prisma.invoice.findMany({
+      where,
+      skip,
+      take: limit,
       orderBy: {
         id: "asc",
       },
     });
 
-    res.json(invoices);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    res.json({
+      data: invoices,
+      page,
+      limit,
+      totalItems,
+      totalPages,
+    });
   } catch (error) {
     next(error);
   }

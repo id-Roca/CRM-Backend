@@ -7,7 +7,9 @@ const createTicketSchema = z
       .string()
       .min(3, "Subject must be at least 3 characters.")
       .max(50),
-    description: z.string().min(3, "Description must be at least 3 characters."),
+    description: z
+      .string()
+      .min(3, "Description must be at least 3 characters."),
     status: z
       .enum(["OPEN", "IN_PROGRESS", "WAITING", "RESOLVED", "CLOSED"])
       .optional(),
@@ -25,7 +27,7 @@ const ticketIdSchema = z.coerce
     error: "Ticket ID must be a number.",
   })
   .int()
-  .positive(" Ticket ID must be a positive number.");
+  .positive("Ticket ID must be a positive number.");
 
 const updateTicketSchema = z
   .object({
@@ -55,12 +57,62 @@ const updateTicketSchema = z
     message: "At least one field is required.",
   });
 
+const ticketFilterSchema = z.object({
+  status: z
+    .enum(["OPEN", "IN_PROGRESS", "WAITING", "RESOLVED", "CLOSED"], {
+      error: "Status must be OPEN, IN_PROGRESS, WAITING, RESOLVED, or CLOSED.",
+    })
+    .optional(),
+  priority: z
+    .enum(["LOW", "MEDIUM", "HIGH", "URGENT"], {
+      error: "Priority must be LOW, MEDIUM, HIGH, OR URGENT.",
+    })
+    .optional(),
+  assignedUserId: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().default(10),
+});
+
 export const getAllTickets = async (req, res, next) => {
   try {
+    const result = ticketFilterSchema.safeParse(req.query);
+
+    if (!result.success) {
+      const error = new Error(result.error.issues[0].message);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const { status, priority, assignedUserId, page, limit } = result.data;
+
+    const skip = (page - 1) * limit;
+
+    const where = {
+      ...(status && { status }),
+      ...(priority && { priority }),
+      ...(assignedUserId && { assignedUserId }),
+    };
+
+    const totalItems = await prisma.ticket.count({
+      where,
+    });
+
     const tickets = await prisma.ticket.findMany({
+      where,
+      skip,
+      take: limit,
       orderBy: { id: "asc" },
     });
-    res.json(tickets);
+
+    const totalPages = Math.ceil(totalItems / limit);
+
+    res.json({
+      data: tickets,
+      page,
+      limit,
+      totalItems,
+      totalPages,
+    });
   } catch (error) {
     next(error);
   }
@@ -166,7 +218,9 @@ export const createNewTicket = async (req, res, next) => {
 
     // Only ADMIN and SUPPORT can create tickets
     if (!["ADMIN", "SUPPORT"].includes(req.user.role)) {
-      const error = new Error("Only admin and support users can create tickets.");
+      const error = new Error(
+        "Only admin and support users can create tickets.",
+      );
       error.statusCode = 403;
       throw error;
     }
@@ -240,10 +294,7 @@ export const createNewTicket = async (req, res, next) => {
         throw error;
       }
 
-      if (
-        offer.contactId !== null &&
-        offer.contactId !== contactId
-      ) {
+      if (offer.contactId !== null && offer.contactId !== contactId) {
         const error = new Error(
           "Offer does not belong to the selected contact.",
         );
@@ -276,10 +327,7 @@ export const createNewTicket = async (req, res, next) => {
         throw error;
       }
 
-      if (
-        invoice.contactId !== null &&
-        invoice.contactId !== contactId
-      ) {
+      if (invoice.contactId !== null && invoice.contactId !== contactId) {
         const error = new Error(
           "Invoice does not belong to the selected contact.",
         );

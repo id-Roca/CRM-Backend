@@ -42,6 +42,10 @@ export const getAllCompanies = async (req, res, next) => {
   }
 };
 
+const companyFilterSchema = z.object({
+  
+})
+
 export const getCompaniesById = async (req, res, next) => {
   try {
     const id = companyIdSchema.safeParse(req.params.id);

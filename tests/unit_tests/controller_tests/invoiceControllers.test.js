@@ -9,6 +9,7 @@ import {
 
 const mockPrisma = {
   invoice: {
+    count: jest.fn(),
     findMany: jest.fn(),
     findUnique: jest.fn(),
     create: jest.fn(),
@@ -34,20 +35,22 @@ beforeAll(async () => {
 describe("getAllInvoices", () => {
   beforeEach(() => {
     jest.resetAllMocks();
+    mockPrisma.invoice.count.mockResolvedValue(1);
   });
 
   test("returns invoices ordered by ID", async () => {
     const invoices = [{ id: 1, companyName: "Acme", amount: 250 }];
     mockPrisma.invoice.findMany.mockResolvedValue(invoices);
 
-    const req = {};
+    const req = { query: {} };
     const res = { json: jest.fn() };
     const next = jest.fn();
 
     await getAllInvoices(req, res, next);
 
-    expect(mockPrisma.invoice.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
-    expect(res.json).toHaveBeenCalledWith(invoices);
+    expect(mockPrisma.invoice.findMany).toHaveBeenCalledWith({ where: {}, skip: 0, take: 10, orderBy: { id: "asc" } });
+    expect(res.json).toHaveBeenCalledWith({ data: invoices, page: 1, limit: 10, totalItems: 1, totalPages: 1 });
+    expect(mockPrisma.invoice.count).toHaveBeenCalledWith({ where: {} });
     expect(next).not.toHaveBeenCalled();
   });
 
@@ -55,7 +58,7 @@ describe("getAllInvoices", () => {
     const databaseError = new Error("Database failed");
     mockPrisma.invoice.findMany.mockRejectedValue(databaseError);
 
-    const req = {};
+    const req = { query: {} };
     const res = { json: jest.fn() };
     const next = jest.fn();
 
@@ -65,6 +68,219 @@ describe("getAllInvoices", () => {
     expect(databaseError.statusCode).toBeUndefined();
     expect(databaseError.message).toBe("Database failed");
     expect(res.json).not.toHaveBeenCalled();
+  });
+
+  test("uses custom pagination", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":5},{"id":6}];
+    mockPrisma.invoice.count.mockResolvedValueOnce(7);
+    mockPrisma.invoice.findMany.mockResolvedValueOnce(data);
+    await getAllInvoices({ query: {"page":"3","limit":"2"} }, res, next);
+    expect(mockPrisma.invoice.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.invoice.findMany).toHaveBeenCalledWith({
+      where: {}, skip: 4, take: 2, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 3, limit: 2, totalItems: 7, totalPages: 4,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("filters by status", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":1}];
+    mockPrisma.invoice.count.mockResolvedValueOnce(1);
+    mockPrisma.invoice.findMany.mockResolvedValueOnce(data);
+    await getAllInvoices({ query: {"status":"PAID"} }, res, next);
+    expect(mockPrisma.invoice.count).toHaveBeenCalledWith({ where: {"status":"PAID"} });
+    expect(mockPrisma.invoice.findMany).toHaveBeenCalledWith({
+      where: {"status":"PAID"}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("filters by companyId", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":1}];
+    mockPrisma.invoice.count.mockResolvedValueOnce(1);
+    mockPrisma.invoice.findMany.mockResolvedValueOnce(data);
+    await getAllInvoices({ query: {"companyId":"2"} }, res, next);
+    expect(mockPrisma.invoice.count).toHaveBeenCalledWith({ where: {"companyId":2} });
+    expect(mockPrisma.invoice.findMany).toHaveBeenCalledWith({
+      where: {"companyId":2}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 1, limit: 10, totalItems: 1, totalPages: 1,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("combines all filters with pagination", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [{"id":3},{"id":4}];
+    mockPrisma.invoice.count.mockResolvedValueOnce(4);
+    mockPrisma.invoice.findMany.mockResolvedValueOnce(data);
+    await getAllInvoices({ query: {"status":"PAID","companyId":"2","page":"2","limit":"2"} }, res, next);
+    expect(mockPrisma.invoice.count).toHaveBeenCalledWith({ where: {"status":"PAID","companyId":2} });
+    expect(mockPrisma.invoice.findMany).toHaveBeenCalledWith({
+      where: {"status":"PAID","companyId":2}, skip: 2, take: 2, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 2, limit: 2, totalItems: 4, totalPages: 2,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("returns zero totals when no records match", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [];
+    mockPrisma.invoice.count.mockResolvedValueOnce(0);
+    mockPrisma.invoice.findMany.mockResolvedValueOnce(data);
+    await getAllInvoices({ query: {"status":"PAID","companyId":"2"} }, res, next);
+    expect(mockPrisma.invoice.count).toHaveBeenCalledWith({ where: {"status":"PAID","companyId":2} });
+    expect(mockPrisma.invoice.findMany).toHaveBeenCalledWith({
+      where: {"status":"PAID","companyId":2}, skip: 0, take: 10, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 1, limit: 10, totalItems: 0, totalPages: 0,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("returns an empty out-of-range page while preserving totals", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const data = [];
+    mockPrisma.invoice.count.mockResolvedValueOnce(3);
+    mockPrisma.invoice.findMany.mockResolvedValueOnce(data);
+    await getAllInvoices({ query: {"page":"5","limit":"2"} }, res, next);
+    expect(mockPrisma.invoice.count).toHaveBeenCalledWith({ where: {} });
+    expect(mockPrisma.invoice.findMany).toHaveBeenCalledWith({
+      where: {}, skip: 8, take: 2, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      data, page: 5, limit: 2, totalItems: 3, totalPages: 2,
+    });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=0", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllInvoices({ query: {"page":"0"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=1.5", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllInvoices({ query: {"page":"1.5"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for page=banana", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllInvoices({ query: {"page":"banana"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=0", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllInvoices({ query: {"limit":"0"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=-1", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllInvoices({ query: {"limit":"-1"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=2.5", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllInvoices({ query: {"limit":"2.5"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for limit=banana", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllInvoices({ query: {"limit":"banana"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for status=INVALID", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllInvoices({ query: {"status":"INVALID"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: "Status must be DRAFT, ISSUED, PAID or CANCELLED." }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for companyId=0", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllInvoices({ query: {"companyId":"0"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 for companyId=banana", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    await getAllInvoices({ query: {"companyId":"banana"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+  });
+
+  test("forwards a count query failure", async () => {
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    const error = new Error("Count failed");
+    mockPrisma.invoice.count.mockRejectedValueOnce(error);
+    await getAllInvoices({ query: {} }, res, next);
+    expect(next).toHaveBeenCalledWith(error);
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
   });
 });
 

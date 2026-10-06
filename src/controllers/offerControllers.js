@@ -34,16 +34,57 @@ const offerIdSchema = z.coerce
   .int()
   .positive("Offer ID must be a positive number.");
 
+const offerFilterSchema = z.object({
+  status: z
+    .enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "CANCELLED"], {
+      error: "Status must be DRAFT, SENT, ACCEPTED, REJECTED or CANCELLED.",
+    })
+    .optional(),
+  companyId: z.coerce.number().int().positive().optional(),
+  salesUserId: z.coerce.number().int().positive().optional(),
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().default(10),
+});
+
 // GET all offers
 export const getAllOffers = async (req, res, next) => {
   try {
+    const result = offerFilterSchema.safeParse(req.query);
+
+    if (!result.success) {
+      const error = new Error(result.error.issues[0].message);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const { status, companyId, salesUserId, page, limit } = result.data;
+    const skip = (page - 1) * limit;
+    const where = {
+      ...(status && { status }),
+      ...(companyId && { companyId }),
+      ...(salesUserId && { salesUserId }),
+    };
+
+    const totalItems = await prisma.offer.count({ where });
+
     const offers = await prisma.offer.findMany({
+      where,
+      skip,
+      take: limit,
       orderBy: {
         id: "asc",
       },
     });
 
-    res.json(offers);
+    const totalPages = Math.ceil(totalItems / limit);
+
+    res.json({
+      data: offers,
+      page,
+      limit,
+      totalItems,
+      totalPages,
+    });
   } catch (error) {
     next(error);
   }
@@ -127,10 +168,7 @@ export const createNewOffer = async (req, res, next) => {
       salesUserId: requestedSalesUserId,
     } = result.data;
 
-    if (
-      req.user.role !== "ADMIN" &&
-      requestedSalesUserId !== undefined
-    ) {
+    if (req.user.role !== "ADMIN" && requestedSalesUserId !== undefined) {
       const error = new Error("Only admins can assign another sales user.");
       error.statusCode = 403;
       throw error;
@@ -239,14 +277,8 @@ export const updateOffer = async (req, res, next) => {
       throw error;
     }
 
-    const {
-      description,
-      amount,
-      companyId,
-      contactId,
-      salesUserId,
-      status,
-    } = result.data;
+    const { description, amount, companyId, contactId, salesUserId, status } =
+      result.data;
 
     if (req.user.role !== "ADMIN" && salesUserId !== undefined) {
       const error = new Error("Only admins can reassign an offer.");
@@ -269,9 +301,7 @@ export const updateOffer = async (req, res, next) => {
     const effectiveCompanyId = companyId ?? existingOffer.companyId;
 
     const effectiveContactId =
-      contactId !== undefined
-        ? contactId
-        : existingOffer.contactId;
+      contactId !== undefined ? contactId : existingOffer.contactId;
 
     if (effectiveContactId !== null) {
       const contact = await prisma.contact.findUnique({
