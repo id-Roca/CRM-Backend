@@ -99,7 +99,7 @@ model Invoice {
   salesUser User    @relation(fields: [salesUserId], references: [id])
 
   companyName   String
-  contactName   String
+  contactName   String?
   salesUserName String
 
   description String
