@@ -84,7 +84,14 @@ describe("getOfferById", () => {
   });
 
   test("returns one offer using a numeric ID", async () => {
-    const offer = { id: 1, description: "Consulting offer", amount: 250, status: "DRAFT", company: { name: "Acme" }, contact: { name: "Anna" }, salesUser: { name: "Sales User" } };
+    const offer = {
+      id: 1, description: "Consulting offer", amount: 250, status: "DRAFT",
+      company: { id: 1, name: "Acme" },
+      contact: { id: 2, name: "Anna", email: "anna@example.com" },
+      salesUser: { id: 3, name: "Sales User", role: "SALES" },
+      createdAt: "2026-10-01T10:00:00.000Z",
+      updatedAt: "2026-10-02T10:00:00.000Z",
+    };
     mockPrisma.offer.findUnique.mockResolvedValue(offer);
 
     const req = { params: { id: "1" } };
@@ -93,7 +100,20 @@ describe("getOfferById", () => {
 
     await getOfferById(req, res, next);
 
-    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({
+      where: { id: 1 },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, email: true } },
+        salesUser: { select: { id: true, name: true, role: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
     expect(res.json).toHaveBeenCalledWith(offer);
     expect(next).not.toHaveBeenCalled();
   });
@@ -157,7 +177,20 @@ describe("getOfferById", () => {
 
     await getOfferById(req, res, next);
 
-    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({ where: { id: 999 } });
+    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({
+      where: { id: 999 },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, email: true } },
+        salesUser: { select: { id: true, name: true, role: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 404,

@@ -141,7 +141,14 @@ describe("GET /api/offers", () => {
 describe("GET /api/offers/:id", () => {
   test("returns one offer for an authenticated admin user", async () => {
     mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "ADMIN" });
-    const offer = { id: 1, description: "Consulting offer", amount: 250, status: "DRAFT" };
+    const offer = {
+      id: 1, description: "Consulting offer", amount: 250, status: "DRAFT",
+      company: { id: 1, name: "Acme" },
+      contact: { id: 2, name: "Anna", email: "anna@example.com" },
+      salesUser: { id: 3, name: "Sales User", role: "SALES" },
+      createdAt: "2026-10-01T10:00:00.000Z",
+      updatedAt: "2026-10-02T10:00:00.000Z",
+    };
     mockPrisma.offer.findUnique.mockResolvedValueOnce(offer);
 
     const response = await request(app)
@@ -151,12 +158,32 @@ describe("GET /api/offers/:id", () => {
       .expect(200);
 
     expect(response.body).toEqual(offer);
-    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({
+      where: { id: 1 },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, email: true } },
+        salesUser: { select: { id: true, name: true, role: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   });
 
   test("returns one offer for an authenticated sales user", async () => {
     mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SALES" });
-    const offer = { id: 1, description: "Consulting offer", amount: 250, status: "DRAFT" };
+    const offer = {
+      id: 1, description: "Consulting offer", amount: 250, status: "DRAFT",
+      company: { id: 1, name: "Acme" },
+      contact: { id: 2, name: "Anna", email: "anna@example.com" },
+      salesUser: { id: 3, name: "Sales User", role: "SALES" },
+      createdAt: "2026-10-01T10:00:00.000Z",
+      updatedAt: "2026-10-02T10:00:00.000Z",
+    };
     mockPrisma.offer.findUnique.mockResolvedValueOnce(offer);
 
     const response = await request(app)
@@ -166,12 +193,32 @@ describe("GET /api/offers/:id", () => {
       .expect(200);
 
     expect(response.body).toEqual(offer);
-    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({
+      where: { id: 1 },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, email: true } },
+        salesUser: { select: { id: true, name: true, role: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   });
 
   test("returns one offer for an authenticated support user", async () => {
     mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SUPPORT" });
-    const offer = { id: 1, description: "Consulting offer", amount: 250, status: "DRAFT" };
+    const offer = {
+      id: 1, description: "Consulting offer", amount: 250, status: "DRAFT",
+      company: { id: 1, name: "Acme" },
+      contact: null,
+      salesUser: { id: 3, name: "Sales User", role: "SALES" },
+      createdAt: "2026-10-01T10:00:00.000Z",
+      updatedAt: "2026-10-02T10:00:00.000Z",
+    };
     mockPrisma.offer.findUnique.mockResolvedValueOnce(offer);
 
     const response = await request(app)
@@ -181,7 +228,20 @@ describe("GET /api/offers/:id", () => {
       .expect(200);
 
     expect(response.body).toEqual(offer);
-    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({
+      where: { id: 1 },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, email: true } },
+        salesUser: { select: { id: true, name: true, role: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   });
 
   test("returns 400 when the offer ID is invalid", async () => {
@@ -214,7 +274,20 @@ describe("GET /api/offers/:id", () => {
       success: false,
       message: "Offer not found.",
     });
-    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({ where: { id: 999 } });
+    expect(mockPrisma.offer.findUnique).toHaveBeenCalledWith({
+      where: { id: 999 },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        company: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, email: true } },
+        salesUser: { select: { id: true, name: true, role: true } },
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   });
 
   test("returns 500 when the database request fails", async () => {

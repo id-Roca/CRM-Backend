@@ -63,6 +63,38 @@ export const getOfferById = async (req, res, next) => {
       where: {
         id: id.data,
       },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+
+        contact: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+
+        salesUser: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        },
+
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     if (!offer) {

@@ -19,7 +19,8 @@ model Company {
   industry String
   contacts Contact[]
   offers   Offer[]
-   invoices Invoice[]
+  invoices Invoice[]
+  tickets Ticket[]
 }
 
 model Contact {
@@ -29,7 +30,8 @@ model Contact {
   companyId Int
   company   Company @relation(fields: [companyId], references: [id])
   offers    Offer[]
-   invoices Invoice[]
+  invoices Invoice[]
+  tickets Ticket[]
 }
 
 enum Role {
@@ -46,7 +48,11 @@ model User {
   role         Role     @default(SALES)
   createdAt    DateTime @default(now())
   offers       Offer[]
-   invoices Invoice[]
+  invoices Invoice[]
+
+  createdTickets  Ticket[] @relation("CreatedTickets")
+  assignedTickets Ticket[] @relation("AssignedTickets")
+
    
 }
 
@@ -75,6 +81,7 @@ model Offer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   invoices     Invoice[]
+  tickets Ticket[]
 }
 
 enum InvoiceStatus {
@@ -97,6 +104,7 @@ model Invoice {
   company   Company @relation(fields: [companyId], references: [id])
   contact   Contact? @relation(fields: [contactId], references: [id])
   salesUser User    @relation(fields: [salesUserId], references: [id])
+  tickets Ticket[]
 
   companyName   String
   contactName   String?
@@ -105,6 +113,47 @@ model Invoice {
   description String
   amount      Decimal
   status      InvoiceStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model Ticket {
+  id          Int            @id @default(autoincrement())
+  subject     String
+  description String
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+
+  companyId   Int
+  contactId   Int
+  offerId     Int?
+  invoiceId   Int?
+  createdById Int
+  assignedUserId Int?
+
+  company      Company  @relation(fields: [companyId], references: [id])
+  contact      Contact  @relation(fields: [contactId], references: [id])
+  offer        Offer?   @relation(fields: [offerId], references: [id])
+  invoice      Invoice? @relation(fields: [invoiceId], references: [id])
+
+  createdBy    User  @relation("CreatedTickets", fields: [createdById], references: [id])
+  assignedUser User? @relation("AssignedTickets", fields: [assignedUserId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

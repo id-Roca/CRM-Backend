@@ -122,7 +122,16 @@ describe("GET /api/invoices", () => {
 describe("GET /api/invoices/:id", () => {
   test("returns an invoice for SUPPORT", async () => {
     mockJwt.verify.mockReturnValue({ userId: 10, role: "SUPPORT" });
-    const invoice = { id: 1, companyName: "Acme Corp", contactName: null, amount: 250 };
+    const invoice = {
+      id: 1, description: "Consulting invoice", amount: 250, status: "DRAFT",
+      offer: null,
+      company: { id: 1, name: "Acme" },
+      contact: null,
+      salesUser: { id: 3, name: "Sales User", role: "SALES" },
+      companyName: "Acme", contactName: null, salesUserName: "Sales User",
+      createdAt: "2026-10-01T10:00:00.000Z",
+      updatedAt: "2026-10-02T10:00:00.000Z",
+    };
     mockPrisma.invoice.findUnique.mockResolvedValueOnce(invoice);
     const response = await request(app)
       .get("/api/invoices/1")
@@ -130,7 +139,24 @@ describe("GET /api/invoices/:id", () => {
       .expect("Content-Type", /json/)
       .expect(200);
     expect(response.body).toEqual(invoice);
-    expect(mockPrisma.invoice.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+    expect(mockPrisma.invoice.findUnique).toHaveBeenCalledWith({
+      where: { id: 1 },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        offer: { select: { id: true, description: true, status: true } },
+        company: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, email: true } },
+        salesUser: { select: { id: true, name: true, role: true } },
+        companyName: true,
+        contactName: true,
+        salesUserName: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   });
 
   test("returns 400 for ID banana", async () => {

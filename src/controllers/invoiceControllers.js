@@ -70,6 +70,50 @@ export const getInvoiceById = async (req, res, next) => {
       where: {
         id: id.data,
       },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+
+        offer: {
+          select: {
+            id: true,
+            description: true,
+            status: true,
+          },
+        },
+
+        company: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+
+        contact: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+
+        salesUser: {
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        },
+
+        companyName: true,
+        contactName: true,
+        salesUserName: true,
+
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     if (!invoice) {
@@ -182,20 +226,14 @@ export const createNewInvoice = async (req, res, next) => {
 
     // SALES users may not assign an invoice to another user.
     // ADMIN may optionally choose another user.
-    if (
-      req.user.role !== "ADMIN" &&
-      requestedSalesUserId !== undefined
-    ) {
-      const error = new Error(
-        "Only admins can assign another sales user.",
-      );
+    if (req.user.role !== "ADMIN" && requestedSalesUserId !== undefined) {
+      const error = new Error("Only admins can assign another sales user.");
       error.statusCode = 403;
       throw error;
     }
 
     const salesUserId =
-      req.user.role === "ADMIN" &&
-      requestedSalesUserId !== undefined
+      req.user.role === "ADMIN" && requestedSalesUserId !== undefined
         ? requestedSalesUserId
         : req.user.userId;
 

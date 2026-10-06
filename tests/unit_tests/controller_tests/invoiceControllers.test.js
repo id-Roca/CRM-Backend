@@ -74,7 +74,16 @@ describe("getInvoiceById", () => {
   });
 
   test("returns one invoice using a numeric ID", async () => {
-    const invoice = { id: 1, amount: 250 };
+    const invoice = {
+      id: 1, description: "Consulting invoice", amount: 250, status: "DRAFT",
+      offer: { id: 8, description: "Accepted work", status: "ACCEPTED" },
+      company: { id: 1, name: "Acme" },
+      contact: { id: 2, name: "Anna", email: "anna@example.com" },
+      salesUser: { id: 3, name: "Sales User", role: "SALES" },
+      companyName: "Acme", contactName: "Anna", salesUserName: "Sales User",
+      createdAt: "2026-10-01T10:00:00.000Z",
+      updatedAt: "2026-10-02T10:00:00.000Z",
+    };
     mockPrisma.invoice.findUnique.mockResolvedValue(invoice);
 
     const req = { params: { id: "1" } };
@@ -83,7 +92,24 @@ describe("getInvoiceById", () => {
 
     await getInvoiceById(req, res, next);
 
-    expect(mockPrisma.invoice.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+    expect(mockPrisma.invoice.findUnique).toHaveBeenCalledWith({
+      where: { id: 1 },
+      select: {
+        id: true,
+        description: true,
+        amount: true,
+        status: true,
+        offer: { select: { id: true, description: true, status: true } },
+        company: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, email: true } },
+        salesUser: { select: { id: true, name: true, role: true } },
+        companyName: true,
+        contactName: true,
+        salesUserName: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
     expect(res.json).toHaveBeenCalledWith(invoice);
     expect(next).not.toHaveBeenCalled();
   });

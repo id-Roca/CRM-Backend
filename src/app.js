@@ -8,6 +8,7 @@ import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import offersRoutes from "./routes/offersRoutes.js";
 import invoceRoutes from "./routes/invoiceRoutes.js";
+import ticketRoutes from "./routes/ticketRoutes.js";
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.use("/api", authRoutes);
 app.use("/api", userRoutes);
 app.use("/api", offersRoutes);
 app.use("/api", invoceRoutes);
+app.use("/api", ticketRoutes);
 
 app.use(notFound);
 
