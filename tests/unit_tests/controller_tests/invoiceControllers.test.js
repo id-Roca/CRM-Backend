@@ -282,6 +282,16 @@ describe("getAllInvoices", () => {
     expect(res.json).not.toHaveBeenCalled();
     expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
   });
+
+  test("rejects unknown query parameters", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await getAllInvoices({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+  });
 });
 
 describe("getInvoiceById", () => {
@@ -352,7 +362,7 @@ describe("getInvoiceById", () => {
     await getInvoiceById(req, res, next);
 
     expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({ statusCode: 400, message: "invoice ID must be a positive number." }),
+      expect.objectContaining({ statusCode: 400, message: "Invoice ID must be a positive number." }),
     );
     expect(mockPrisma.invoice.findUnique).not.toHaveBeenCalled();
     expect(res.json).not.toHaveBeenCalled();
@@ -795,6 +805,32 @@ describe("updateInvoice", () => {
     mockPrisma.user.findUnique.mockResolvedValue({ id: 6, name: "New User" });
   });
 
+  test("clears an existing contact when contactId is null", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValueOnce({
+      id: 1, companyId: 1, contactId: 2, salesUserId: 3,
+    });
+    const invoice = { id: 1, contactId: null, contactName: null };
+    mockPrisma.invoice.update.mockResolvedValueOnce(invoice);
+
+    const req = {
+      user: { userId: 10, role: "ADMIN" },
+      params: { id: "1" },
+      body: { contactId: null },
+    };
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+
+    await updateInvoice(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(mockPrisma.contact.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: expect.objectContaining({ contactId: null, contactName: null }),
+    });
+    expect(res.json).toHaveBeenCalledWith(invoice);
+  });
+
   test("updates all fields and refreshes relationship snapshot names for ADMIN", async () => {
     const invoice = { id: 1, companyName: "New Company", contactName: "New Contact", salesUserName: "New User" };
     mockPrisma.invoice.update.mockResolvedValue(invoice);
@@ -1079,5 +1115,14 @@ describe("updateInvoice", () => {
     expect(databaseError.message).toBe("Database failed");
     expect(mockPrisma.invoice.update).not.toHaveBeenCalled();
     expect(res.json).not.toHaveBeenCalled();
+  });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await updateInvoice({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, body: {"description":"Updated work","unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.update).not.toHaveBeenCalled();
   });
 });

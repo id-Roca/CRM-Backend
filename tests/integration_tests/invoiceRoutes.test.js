@@ -391,6 +391,19 @@ describe("GET /api/invoices", () => {
     expect(response.body).toEqual({ success: false, message: "Count failed" });
     expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
   });
+
+  test("rejects unknown query parameters", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .get("/api/invoices")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.invoice.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.invoice.count).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/invoices/:id", () => {
@@ -451,7 +464,7 @@ describe("GET /api/invoices/:id", () => {
       .set("Authorization", "Bearer dummy-token")
       .expect("Content-Type", /json/)
       .expect(400);
-    expect(response.body).toEqual({ success: false, message: "invoice ID must be a positive number." });
+    expect(response.body).toEqual({ success: false, message: "Invoice ID must be a positive number." });
     expect(mockPrisma.invoice.findUnique).not.toHaveBeenCalled();
   });
 
@@ -992,6 +1005,38 @@ describe("PATCH /api/invoices/:id", () => {
     expect(response.body).toEqual({ success: false, message: "Database connection failed" });
   });
 
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .patch("/api/invoices/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({"description":"Updated work","unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.invoice.update).not.toHaveBeenCalled();
+  });
+
+  test("removes an existing contact when contactId is null", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    mockPrisma.invoice.findUnique.mockResolvedValueOnce({ id: 1, companyId: 1, contactId: 2, salesUserId: 3 });
+    const record = { id: 1, contact: null, contactName: null };
+    mockPrisma.invoice.update.mockResolvedValueOnce(record);
+    const response = await request(app)
+      .patch("/api/invoices/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({"contactId":null})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.invoice.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 1 },
+      data: expect.objectContaining({ contactId: null, contactName: null }),
+    }));
+    expect(mockPrisma.contact.findUnique).not.toHaveBeenCalled();
+    expect(response.body).toEqual(record);
+
+  });
 });
 
 describe("DELETE /api/invoices/:id", () => {

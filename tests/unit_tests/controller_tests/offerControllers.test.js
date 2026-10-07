@@ -330,6 +330,16 @@ describe("getAllOffers", () => {
     expect(res.json).not.toHaveBeenCalled();
     expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
   });
+
+  test("rejects unknown query parameters", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await getAllOffers({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+  });
 });
 
 describe("getOfferById", () => {
@@ -727,6 +737,15 @@ describe("createNewOffer", () => {
     expect(res.status).not.toHaveBeenCalled();
     expect(res.json).not.toHaveBeenCalled();
   });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await createNewOffer({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, body: {"description":"Consulting work","amount":250,"companyId":1,"unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("updateOffer", () => {
@@ -923,25 +942,6 @@ describe("updateOffer", () => {
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({ where: { id: 99 } });
   });
 
-  test("rejects null contactId rather than removing the contact", async () => {
-
-    const req = {
-      user: { userId: 10, role: "ADMIN" },
-      params: { id: "1" },
-      body: { contactId: null },
-    };
-    const res = { json: jest.fn() };
-    const next = jest.fn();
-
-    await updateOffer(req, res, next);
-
-    expect(next).toHaveBeenCalledWith(
-      expect.objectContaining({ statusCode: 400 }),
-    );
-    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
-    expect(res.json).not.toHaveBeenCalled();
-    expect(mockPrisma.offer.findUnique).not.toHaveBeenCalled();
-  });
 
   test("forwards unexpected offer lookup errors", async () => {
     const databaseError = new Error("Lookup failed");
@@ -1212,5 +1212,30 @@ describe("updateOffer", () => {
     expect(next).toHaveBeenCalledWith(databaseError);
     expect(databaseError.statusCode).toBeUndefined();
     expect(res.json).not.toHaveBeenCalled();
+  });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await updateOffer({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, body: {"description":"Updated work","unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+  });
+
+  test("removes an existing contact when contactId is null", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    mockPrisma.offer.findUnique.mockResolvedValueOnce({ id: 1, companyId: 1, contactId: 2, salesUserId: 3 });
+    const record = { id: 1, contact: null };
+    mockPrisma.offer.update.mockResolvedValueOnce(record);
+    await updateOffer({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, body: {"contactId":null} }, res, next);
+    expect(mockPrisma.offer.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 1 },
+      data: expect.objectContaining({ contactId: null }),
+    }));
+    expect(mockPrisma.contact.findUnique).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith(record);
+    expect(next).not.toHaveBeenCalled();
   });
 });

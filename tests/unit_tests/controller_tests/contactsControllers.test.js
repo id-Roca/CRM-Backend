@@ -54,7 +54,7 @@ describe("getAllContacts", () => {
 
     mockPrisma.contact.findMany.mockResolvedValue(fakeContacts);
 
-    const req = {};
+    const req = { query: {} };
 
     const res = {
       json: jest.fn(),
@@ -66,6 +66,7 @@ describe("getAllContacts", () => {
 
     expect(mockPrisma.contact.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
+        where: {},
         orderBy: {
           id: "asc",
         },
@@ -75,6 +76,82 @@ describe("getAllContacts", () => {
     expect(res.json).toHaveBeenCalledWith(fakeContacts);
 
     expect(next).not.toHaveBeenCalled();
+  });
+
+  test("trims search and passes case-insensitive matching to Prisma", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    const records = [{"id":1,"name":"Acme","email":"acme@example.com"}];
+    mockPrisma.contact.findMany.mockResolvedValueOnce(records);
+    await getAllContacts({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"search":"  AcMe  "} }, res, next);
+    expect(mockPrisma.contact.findMany).toHaveBeenCalledWith({
+      where: {"OR":[{"name":{"contains":"AcMe","mode":"insensitive"}},{"email":{"contains":"AcMe","mode":"insensitive"}}]}, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith(records);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("returns an empty array for no search matches", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    const records = [];
+    mockPrisma.contact.findMany.mockResolvedValueOnce(records);
+    await getAllContacts({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"search":"absent"} }, res, next);
+    expect(mockPrisma.contact.findMany).toHaveBeenCalledWith({
+      where: {"OR":[{"name":{"contains":"absent","mode":"insensitive"}},{"email":{"contains":"absent","mode":"insensitive"}}]}, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith(records);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("searches contacts by email or name", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    const records = [{"id":2,"name":"Anna","email":"anna@example.com"}];
+    mockPrisma.contact.findMany.mockResolvedValueOnce(records);
+    await getAllContacts({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"search":"anna@example.com"} }, res, next);
+    expect(mockPrisma.contact.findMany).toHaveBeenCalledWith({
+      where: {"OR":[{"name":{"contains":"anna@example.com","mode":"insensitive"}},{"email":{"contains":"anna@example.com","mode":"insensitive"}}]}, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith(records);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("rejects invalid search \"   \"", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await getAllContacts({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"search":"   "} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: "Search must contain at least one character." }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.contact.findMany).not.toHaveBeenCalled();
+  });
+
+  test("rejects invalid search [\"Anna\",\"Acme\"]", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await getAllContacts({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"search":["Anna","Acme"]} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.contact.findMany).not.toHaveBeenCalled();
+  });
+
+  test("rejects invalid search \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await getAllContacts({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"search":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.contact.findMany).not.toHaveBeenCalled();
+  });
+
+  test("rejects unknown query parameters", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await getAllContacts({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.contact.findMany).not.toHaveBeenCalled();
+
   });
 });
 
@@ -453,6 +530,15 @@ describe("updateContact", () => {
     expect(databaseError.message).toBe("Database unavailable");
     expect(databaseError.statusCode).toBeUndefined();
     expect(res.json).not.toHaveBeenCalled();
+  });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await updateContact({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, body: {"name":"Updated name","unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.contact.update).not.toHaveBeenCalled();
   });
 });
 

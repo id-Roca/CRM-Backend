@@ -456,6 +456,19 @@ describe("GET /api/offers", () => {
     expect(response.body).toEqual({ success: false, message: "Count failed" });
     expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
   });
+
+  test("rejects unknown query parameters", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .get("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.findMany).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.count).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /api/offers/:id", () => {
@@ -954,6 +967,18 @@ describe("POST /api/offers", () => {
       message: "Database connection failed",
     });
   });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .post("/api/offers")
+      .set("Authorization", "Bearer dummy-token")
+      .send({"description":"Consulting work","amount":250,"companyId":1,"unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("PATCH /api/offers/:id", () => {
@@ -1370,5 +1395,37 @@ describe("PATCH /api/offers/:id", () => {
       success: false,
       message: "Database connection failed",
     });
+  });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({"description":"Updated work","unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+  });
+
+  test("removes an existing contact when contactId is null", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    mockPrisma.offer.findUnique.mockResolvedValueOnce({ id: 1, companyId: 1, contactId: 2, salesUserId: 3 });
+    const record = { id: 1, contact: null };
+    mockPrisma.offer.update.mockResolvedValueOnce(record);
+    const response = await request(app)
+      .patch("/api/offers/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({"contactId":null})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.offer.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 1 },
+      data: expect.objectContaining({ contactId: null }),
+    }));
+    expect(mockPrisma.contact.findUnique).not.toHaveBeenCalled();
+    expect(response.body).toEqual(record);
+
   });
 });

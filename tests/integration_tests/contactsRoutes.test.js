@@ -54,7 +54,8 @@ describe("GET /api/contacts", () => {
       .expect(200);
 
     expect(response.body).toEqual(contacts);
-    expect(mockPrisma.contact.findMany).toHaveBeenCalledWith({ orderBy: { id: "asc" } });
+    expect(mockPrisma.contact.findMany).toHaveBeenCalledWith({ where: {},
+      orderBy: { id: "asc" } });
   });
 
   test("returns 401 when no authentication token is provided", async () => {
@@ -104,6 +105,106 @@ describe("GET /api/contacts", () => {
       success: false,
       message: "Database connection failed",
     });
+  });
+
+  test("trims search and passes case-insensitive matching to Prisma", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const records = [{"id":1,"name":"Acme","email":"acme@example.com"}];
+    mockPrisma.contact.findMany.mockResolvedValueOnce(records);
+    const response = await request(app)
+      .get("/api/contacts")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"search":"  AcMe  "})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.contact.findMany).toHaveBeenCalledWith({
+      where: {"OR":[{"name":{"contains":"AcMe","mode":"insensitive"}},{"email":{"contains":"AcMe","mode":"insensitive"}}]}, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual(records);
+
+  });
+
+  test("returns an empty array for no search matches", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const records = [];
+    mockPrisma.contact.findMany.mockResolvedValueOnce(records);
+    const response = await request(app)
+      .get("/api/contacts")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"search":"absent"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.contact.findMany).toHaveBeenCalledWith({
+      where: {"OR":[{"name":{"contains":"absent","mode":"insensitive"}},{"email":{"contains":"absent","mode":"insensitive"}}]}, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual(records);
+
+  });
+
+  test("searches contacts by email or name", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const records = [{"id":2,"name":"Anna","email":"anna@example.com"}];
+    mockPrisma.contact.findMany.mockResolvedValueOnce(records);
+    const response = await request(app)
+      .get("/api/contacts")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"search":"anna@example.com"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.contact.findMany).toHaveBeenCalledWith({
+      where: {"OR":[{"name":{"contains":"anna@example.com","mode":"insensitive"}},{"email":{"contains":"anna@example.com","mode":"insensitive"}}]}, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual(records);
+
+  });
+
+  test("rejects invalid search \"   \"", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .get("/api/contacts")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"search":"   "})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: "Search must contain at least one character." });
+    expect(mockPrisma.contact.findMany).not.toHaveBeenCalled();
+  });
+
+  test("rejects invalid search [\"Anna\",\"Acme\"]", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .get("/api/contacts")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"search":["Anna","Acme"]})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.contact.findMany).not.toHaveBeenCalled();
+  });
+
+  test("rejects invalid search \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .get("/api/contacts")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"search":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.contact.findMany).not.toHaveBeenCalled();
+  });
+
+  test("rejects unknown query parameters", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .get("/api/contacts")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.contact.findMany).not.toHaveBeenCalled();
+
   });
 });
 
@@ -469,6 +570,18 @@ describe("PATCH /api/contacts/:id", () => {
       success: false,
       message: "Database connection failed",
     });
+  });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .patch("/api/contacts/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({"name":"Updated name","unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.contact.update).not.toHaveBeenCalled();
   });
 });
 

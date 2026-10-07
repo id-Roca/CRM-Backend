@@ -479,6 +479,15 @@ describe("createUser", () => {
     expect(res.status).not.toHaveBeenCalled();
     expect(res.json).not.toHaveBeenCalled();
   });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await createUser({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, body: {"name":"Test User","email":"test@example.com","password":"dummy-password","role":"SALES","unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.user.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("updateUser", () => {
@@ -889,6 +898,15 @@ describe("updateUser", () => {
 
     // No success response should be sent
     expect(res.json).not.toHaveBeenCalled();
+  });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await updateUser({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, body: {"name":"Updated name","unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
   });
 });
 

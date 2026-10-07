@@ -1,10 +1,12 @@
 import prisma from "../prisma.js";
 import { z } from "zod";
 
-const createCompanySchema = z.object({
-  name: z.string().min(3, "Name must be at least 3 characters.").max(50),
-  industry: z.string().min(3, "Industry must be at least 3 characters."),
-});
+const createCompanySchema = z
+  .object({
+    name: z.string().min(3, "Name must be at least 3 characters.").max(50),
+    industry: z.string().min(3, "Industry must be at least 3 characters."),
+  })
+  .strict();
 
 const updateCompanySchema = z
   .object({
@@ -13,11 +15,13 @@ const updateCompanySchema = z
       .min(3, "Name must be at least 3 characters.")
       .max(50)
       .optional(),
+
     industry: z
       .string()
       .min(3, "Industry must be at least 3 characters.")
       .optional(),
   })
+  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field is required.",
   });
@@ -29,9 +33,37 @@ const companyIdSchema = z.coerce
   .int()
   .positive("Company ID must be a positive number.");
 
+const companySearchSchema = z
+  .object({
+    search: z
+      .string()
+      .trim()
+      .min(1, "Search must contain at least one character.")
+      .optional(),
+  })
+  .strict();
+
 export const getAllCompanies = async (req, res, next) => {
   try {
+    const result = companySearchSchema.safeParse(req.query);
+
+    if (!result.success) {
+      const error = new Error(result.error.issues[0].message);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const { search } = result.data;
+
     const companies = await prisma.company.findMany({
+      where: {
+        ...(search && {
+          name: {
+            contains: search,
+            mode: "insensitive",
+          },
+        }),
+      },
       orderBy: {
         id: "asc",
       },
@@ -41,10 +73,6 @@ export const getAllCompanies = async (req, res, next) => {
     next(error);
   }
 };
-
-const companyFilterSchema = z.object({
-  
-})
 
 export const getCompaniesById = async (req, res, next) => {
   try {
@@ -111,9 +139,8 @@ export const updateCompany = async (req, res, next) => {
       throw error;
     }
 
-    const id = companyIdSchema.safeParse(req.params.id)
+    const id = companyIdSchema.safeParse(req.params.id);
 
-    // Validate company ID from URL with zod
     if (!id.success) {
       const error = new Error(id.error.issues[0].message);
       error.statusCode = 400;
@@ -124,7 +151,7 @@ export const updateCompany = async (req, res, next) => {
 
     const updatedCompany = await prisma.company.update({
       where: {
-        id: id.data
+        id: id.data,
       },
       data: {
         name,
@@ -150,7 +177,7 @@ export const updateCompany = async (req, res, next) => {
 
 export const deleteCompany = async (req, res, next) => {
   try {
-    const id = companyIdSchema.safeParse(req.params.id)
+    const id = companyIdSchema.safeParse(req.params.id);
 
     if (!id.success) {
       const error = new Error(id.error.issues[0].message);

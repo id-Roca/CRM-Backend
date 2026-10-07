@@ -1,13 +1,17 @@
 import prisma from "../prisma.js";
 import { z } from "zod";
 
-const createOfferSchema = z.object({
-  description: z.string().min(3, "Description must be at least 3 characters."),
-  amount: z.number().positive("Amount must be greater than 0."),
-  companyId: z.number().int().positive(),
-  contactId: z.number().int().positive().optional(),
-  salesUserId: z.number().int().positive().optional(),
-});
+const createOfferSchema = z
+  .object({
+    description: z
+      .string()
+      .min(3, "Description must be at least 3 characters."),
+    amount: z.number().positive("Amount must be greater than 0."),
+    companyId: z.number().int().positive(),
+    contactId: z.number().int().positive().optional(),
+    salesUserId: z.number().int().positive().optional(),
+  })
+  .strict();
 
 const updateOfferSchema = z
   .object({
@@ -17,12 +21,13 @@ const updateOfferSchema = z
       .optional(),
     amount: z.number().positive("Amount must be greater than 0.").optional(),
     companyId: z.number().int().positive().optional(),
-    contactId: z.number().int().positive().optional(),
+    contactId: z.number().int().positive().nullable().optional(),
     salesUserId: z.number().int().positive().optional(),
     status: z
       .enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "CANCELLED"])
       .optional(),
   })
+  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field is required.",
   });
@@ -34,17 +39,19 @@ const offerIdSchema = z.coerce
   .int()
   .positive("Offer ID must be a positive number.");
 
-const offerFilterSchema = z.object({
-  status: z
-    .enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "CANCELLED"], {
-      error: "Status must be DRAFT, SENT, ACCEPTED, REJECTED or CANCELLED.",
-    })
-    .optional(),
-  companyId: z.coerce.number().int().positive().optional(),
-  salesUserId: z.coerce.number().int().positive().optional(),
-  page: z.coerce.number().int().positive().default(1),
-  limit: z.coerce.number().int().positive().default(10),
-});
+const offerFilterSchema = z
+  .object({
+    status: z
+      .enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "CANCELLED"], {
+        error: "Status must be DRAFT, SENT, ACCEPTED, REJECTED or CANCELLED.",
+      })
+      .optional(),
+    companyId: z.coerce.number().int().positive().optional(),
+    salesUserId: z.coerce.number().int().positive().optional(),
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().default(10),
+  })
+  .strict();
 
 // GET all offers
 export const getAllOffers = async (req, res, next) => {

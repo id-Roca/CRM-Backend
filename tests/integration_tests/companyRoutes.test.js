@@ -68,6 +68,7 @@ describe("GET /api/companies", () => {
     expect(response.body).toEqual(fakeCompanies);
 
     expect(mockPrisma.company.findMany).toHaveBeenCalledWith({
+      where: {},
       orderBy: {
         id: "asc",
       },
@@ -125,6 +126,77 @@ describe("GET /api/companies", () => {
       success: false,
       message: "Database connection failed",
     });
+  });
+
+  test("trims search and passes case-insensitive matching to Prisma", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const records = [{"id":1,"name":"Acme","industry":"Technology"}];
+    mockPrisma.company.findMany.mockResolvedValueOnce(records);
+    const response = await request(app)
+      .get("/api/companies")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"search":"  AcMe  "})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.company.findMany).toHaveBeenCalledWith({
+      where: {"name":{"contains":"AcMe","mode":"insensitive"}}, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual(records);
+
+  });
+
+  test("returns an empty array for no search matches", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const records = [];
+    mockPrisma.company.findMany.mockResolvedValueOnce(records);
+    const response = await request(app)
+      .get("/api/companies")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"search":"absent"})
+      .expect("Content-Type", /json/)
+      .expect(200);
+    expect(mockPrisma.company.findMany).toHaveBeenCalledWith({
+      where: {"name":{"contains":"absent","mode":"insensitive"}}, orderBy: { id: "asc" },
+    });
+    expect(response.body).toEqual(records);
+
+  });
+
+  test("rejects invalid search \"   \"", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .get("/api/companies")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"search":"   "})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: "Search must contain at least one character." });
+    expect(mockPrisma.company.findMany).not.toHaveBeenCalled();
+  });
+
+  test("rejects invalid search [\"Anna\",\"Acme\"]", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .get("/api/companies")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"search":["Anna","Acme"]})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.company.findMany).not.toHaveBeenCalled();
+  });
+
+  test("rejects unknown query parameters", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .get("/api/companies")
+      .set("Authorization", "Bearer dummy-token")
+      .query({"unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.company.findMany).not.toHaveBeenCalled();
+
   });
 });
 
@@ -357,6 +429,18 @@ describe("POST /api/companies", () => {
       message: "Database connection failed",
     });
   });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .post("/api/companies")
+      .set("Authorization", "Bearer dummy-token")
+      .send({"name":"Acme","industry":"Technology","unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.company.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("PATCH /api/companies/:id", () => {
@@ -502,6 +586,18 @@ describe("PATCH /api/companies/:id", () => {
       success: false,
       message: "Database connection failed",
     });
+  });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .patch("/api/companies/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({"name":"Updated name","unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.company.update).not.toHaveBeenCalled();
   });
 });
 

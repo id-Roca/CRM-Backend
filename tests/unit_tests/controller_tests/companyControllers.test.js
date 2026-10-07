@@ -46,13 +46,14 @@ describe("getAllCompanies", () => {
     const fakeCompanies = [{ id: 1, name: "Acme", industry: "Technology" }];
     mockPrisma.company.findMany.mockResolvedValue(fakeCompanies);
 
-    const req = {};
+    const req = { query: {} };
     const res = { json: jest.fn() };
     const next = jest.fn();
 
     await getAllCompanies(req, res, next);
 
     expect(mockPrisma.company.findMany).toHaveBeenCalledWith({
+      where: {},
       orderBy: { id: "asc" },
     });
     expect(res.json).toHaveBeenCalledWith(fakeCompanies);
@@ -62,13 +63,14 @@ describe("getAllCompanies", () => {
   test("returns an empty array when no companies exist", async () => {
     mockPrisma.company.findMany.mockResolvedValue([]);
 
-    const req = {};
+    const req = { query: {} };
     const res = { json: jest.fn() };
     const next = jest.fn();
 
     await getAllCompanies(req, res, next);
 
     expect(mockPrisma.company.findMany).toHaveBeenCalledWith({
+      where: {},
       orderBy: { id: "asc" },
     });
     expect(res.json).toHaveBeenCalledWith([]);
@@ -79,17 +81,72 @@ describe("getAllCompanies", () => {
     const databaseError = new Error("Database unavailable");
     mockPrisma.company.findMany.mockRejectedValue(databaseError);
 
-    const req = {};
+    const req = { query: {} };
     const res = { json: jest.fn() };
     const next = jest.fn();
 
     await getAllCompanies(req, res, next);
 
     expect(mockPrisma.company.findMany).toHaveBeenCalledWith({
+      where: {},
       orderBy: { id: "asc" },
     });
     expect(next).toHaveBeenCalledWith(databaseError);
     expect(res.json).not.toHaveBeenCalled();
+  });
+
+  test("trims search and passes case-insensitive matching to Prisma", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    const records = [{"id":1,"name":"Acme","industry":"Technology"}];
+    mockPrisma.company.findMany.mockResolvedValueOnce(records);
+    await getAllCompanies({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"search":"  AcMe  "} }, res, next);
+    expect(mockPrisma.company.findMany).toHaveBeenCalledWith({
+      where: {"name":{"contains":"AcMe","mode":"insensitive"}}, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith(records);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("returns an empty array for no search matches", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    const records = [];
+    mockPrisma.company.findMany.mockResolvedValueOnce(records);
+    await getAllCompanies({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"search":"absent"} }, res, next);
+    expect(mockPrisma.company.findMany).toHaveBeenCalledWith({
+      where: {"name":{"contains":"absent","mode":"insensitive"}}, orderBy: { id: "asc" },
+    });
+    expect(res.json).toHaveBeenCalledWith(records);
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test("rejects invalid search \"   \"", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await getAllCompanies({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"search":"   "} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: "Search must contain at least one character." }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.company.findMany).not.toHaveBeenCalled();
+  });
+
+  test("rejects invalid search [\"Anna\",\"Acme\"]", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await getAllCompanies({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"search":["Anna","Acme"]} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.company.findMany).not.toHaveBeenCalled();
+  });
+
+  test("rejects unknown query parameters", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await getAllCompanies({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, query: {"unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.company.findMany).not.toHaveBeenCalled();
+
   });
 });
 
@@ -283,6 +340,15 @@ describe("createNewCompany", () => {
     expect(res.status).not.toHaveBeenCalled();
     expect(res.json).not.toHaveBeenCalled();
   });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await createNewCompany({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, body: {"name":"Acme","industry":"Technology","unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.company.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("updateCompany", () => {
@@ -440,6 +506,15 @@ describe("updateCompany", () => {
     expect(databaseError.message).toBe("Database unavailable");
     expect(databaseError.statusCode).toBeUndefined();
     expect(res.json).not.toHaveBeenCalled();
+  });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const next = jest.fn();
+    await updateCompany({ user: { userId: 10, role: "ADMIN" }, params: { id: "1" }, body: {"name":"Updated name","unexpected":"value"} }, res, next);
+    expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 400, message: expect.any(String) }));
+    expect(res.json).not.toHaveBeenCalled();
+    expect(mockPrisma.company.update).not.toHaveBeenCalled();
   });
 });
 

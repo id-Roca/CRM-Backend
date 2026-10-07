@@ -464,6 +464,18 @@ describe("POST /api/users", () => {
     expect(mockPrisma.user.create).not.toHaveBeenCalled();
     expect(mockBcrypt.hash).toHaveBeenCalledWith("dummy-password", 10);
   });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .post("/api/users")
+      .set("Authorization", "Bearer dummy-token")
+      .send({"name":"Test User","email":"test@example.com","password":"dummy-password","role":"SALES","unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.user.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("PATCH /api/users/:id", () => {
@@ -718,6 +730,18 @@ describe("PATCH /api/users/:id", () => {
     });
     expect(mockPrisma.user.update).not.toHaveBeenCalled();
     expect(mockBcrypt.hash).toHaveBeenCalledWith("dummy-password", 10);
+  });
+
+  test("rejects unexpected fields alongside valid data", async () => {
+    mockJwt.verify.mockReturnValue({ userId: 10, role: "ADMIN" });
+    const response = await request(app)
+      .patch("/api/users/1")
+      .set("Authorization", "Bearer dummy-token")
+      .send({"name":"Updated name","unexpected":"value"})
+      .expect("Content-Type", /json/)
+      .expect(400);
+    expect(response.body).toEqual({ success: false, message: expect.any(String) });
+    expect(mockPrisma.user.update).not.toHaveBeenCalled();
   });
 });
 

@@ -36,18 +36,14 @@ const updateTicketSchema = z
       .min(3, "Subject must be at least 3 characters.")
       .max(50)
       .optional(),
-
     description: z
       .string()
       .min(3, "Description must be at least 3 characters.")
       .optional(),
-
     status: z
       .enum(["OPEN", "IN_PROGRESS", "WAITING", "RESOLVED", "CLOSED"])
       .optional(),
-
     priority: z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]).optional(),
-
     offerId: z.number().int().positive().nullable().optional(),
     invoiceId: z.number().int().positive().nullable().optional(),
     assignedUserId: z.number().int().positive().nullable().optional(),

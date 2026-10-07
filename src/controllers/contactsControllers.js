@@ -17,6 +17,7 @@ const updateContactSchema = z
     email: z.email("Invalid email address").max(100).optional(),
     companyId: z.number().int().positive().optional(),
   })
+  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field is required.",
   });
@@ -28,21 +29,57 @@ const contactsIdSchema = z.coerce
   .int()
   .positive("Contact ID must be a positive number.");
 
-//  GET all
+const contactsSearchSchema = z
+  .object({
+    search: z
+      .string()
+      .trim()
+      .min(1, "Search must contain at least one character.")
+      .max(50)
+      .optional(),
+  })
+  .strict();
+
 export const getAllContacts = async (req, res, next) => {
   try {
-    const contact = await prisma.contact.findMany({
+    const result = contactsSearchSchema.safeParse(req.query);
+    if (!result.success) {
+      const error = new Error(result.error.issues[0].message);
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const { search } = result.data;
+
+    const contacts = await prisma.contact.findMany({
+      where: {
+        ...(search && {
+          OR: [
+            {
+              name: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+            {
+              email: {
+                contains: search,
+                mode: "insensitive",
+              },
+            },
+          ],
+        }),
+      },
       orderBy: {
         id: "asc",
       },
     });
-    res.json(contact);
+    res.json(contacts);
   } catch (error) {
     next(error);
   }
 };
 
-// GET by specific ID
 export const getContactsById = async (req, res, next) => {
   try {
     const id = contactsIdSchema.safeParse(req.params.id);
@@ -70,12 +107,9 @@ export const getContactsById = async (req, res, next) => {
   }
 };
 
-// POST
 export const createNewContact = async (req, res, next) => {
   try {
     const result = createContactSchema.safeParse(req.body);
-    // console.log(result);
-    // console.log(result.error);
 
     if (!result.success) {
       const error = new Error(result.error.issues[0].message);
@@ -114,7 +148,6 @@ export const updateContact = async (req, res, next) => {
     }
     const id = contactsIdSchema.safeParse(req.params.id);
 
-    // Validate contact ID from URL
     if (!id.success) {
       const error = new Error(id.error.issues[0].message);
       error.statusCode = 400;
