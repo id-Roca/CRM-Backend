@@ -1,108 +1,508 @@
 # CRM Backend API
 
-A REST API for a small Customer Relationship Management (CRM) system.
+## 1. About the Project
 
-The project manages companies, their contacts, and CRM users. It was built as a backend learning project using Node.js, Express, PostgreSQL, and Prisma.
+The CRM Backend API is a REST API for a small Customer Relationship Management system. It is designed to manage customer relationships and common business processes in one backend application.
 
-## Part 1: Deployment Concepts & Fundamentals
+The API allows users to manage companies and contacts, create offers and invoices, and handle support tickets. It also includes user management with role-based permissions for administrators, sales users, and support users.
 
-1. **What is deployment?**
+### Main Features
 
-**Deployment** means taking an aplication and putting it into an environment that can run on the internet. **Backend deployment** is the process of taking an application that runs locally during development and making it run on infrastructure accessible through the internet. It is necessary in production because users and other applications need a reliable way to reach the API without depending on the developer's personal computer.
+- Company and contact management
+- Offer and invoice management
+- Support ticket management
+- User management with role-based access
+- JWT-based authentication
+- Filtering and pagination for supported resources
+- Input validation and centralized error handling
 
-2. **The Deployment Process:**
+## 2. Tech Stack
 
-After the code is pushed to GitHub, a connected hosting platform retrieves the code and prepares an environment in which it can run. It installs the project's dependencies, performs any necessary build or setup steps, loads configured environment variables, and starts the Node.js application using its start command. The platform exposes the running application through a public URL. Requests sent to that URL can then reach the Express server, which processes them and communicates with services such as the database before returning a response.
+- **Node.js** — JavaScript runtime used to build the backend application.
+- **Express.js** — Web framework used to create the REST API, routes, and middleware.
+- **PostgreSQL** — Relational database used for persistent storage and related CRM data.
+- **Prisma ORM** — Used to define the data model, manage migrations, and interact with PostgreSQL.
+- **Zod** — Used to validate request data before it reaches the database.
+- **JSON Web Tokens (JWT)** — Used for stateless authentication of protected routes.
+- **bcrypt** — Used to securely hash user passwords.
+- **CORS** — Used to control which frontend origins can access the API.
+- **express-rate-limit** — Used to limit repeated requests and protect sensitive endpoints.
+- **Jest & Supertest** — Used for automated API and integration testing.
 
-3. **The Localhost Limitation:**
+## 3. Data Model / ERD
 
-`localhost` is only accessible from the machine on which the application is running, so external users cannot use it as a public API. A personal computer is also unsuitable as a production server because it may sleep, restart, lose its internet connection or be turned off, and exposing a development computer directly to the internet creates security and reliability problems. Production hosting provides infrastructure designed to keep the application available and reachable through a public address.
+The CRM uses a relational PostgreSQL database with six main entities:
 
-4. **Separation of Concerns:**
-
-Application servers and databases have **different responsibilities and infrastructure requirements**, so they are commonly hosted separately in production. The Express application can be updated, restarted or scaled independently, while the database requires persistent storage, backups, controlled access and database-specific maintenance. A managed database service can handle many of these responsibilities. Separating them also improves reliability, security and scalability because a change or resource requirement in one component does not necessarily require changing the other.
-
-GitHub stores the **code**. A hosting provider runs the **application**. A database provider stores the **persistent data**. Environment variables provide the **secrets/configuration**. A public URL gives clients a way to **reach the API**.
+- **Company** — represents a customer company and can have multiple contacts, offers, invoices, and tickets.
+- **Contact** — belongs to one company and can be linked to offers, invoices, and tickets.
+- **User** — represents an authenticated CRM user with an `ADMIN`, `SALES`, or `SUPPORT` role.
+- **Offer** — belongs to a company, may be linked to a contact, and has a sales user responsible for it.
+- **Invoice** — belongs to a company and sales user, can optionally be linked to a contact, and may be created from an offer.
+- **Ticket** — belongs to a company and contact, records the user who created it, and can optionally be linked to an offer, invoice, and assigned user.
 
 ---
 
-## Part 2: Platform Landscape & Student Options
+### Entity Relationships
 
-1. **Platform Research**
+The following diagram provides a simplified overview of how the main CRM entities are connected:
 
-   ### 1. Backend Application Hosting
+```mermaid
+erDiagram
+    COMPANY ||--o{ CONTACT : has
+    COMPANY ||--o{ OFFER : has
+    COMPANY ||--o{ INVOICE : has
+    COMPANY ||--o{ TICKET : has
 
-**Render**
+    CONTACT o|--o{ OFFER : linked_to
+    CONTACT o|--o{ INVOICE : linked_to
+    CONTACT ||--o{ TICKET : has
 
-Render offers a free Web Service suitable for a small Node.js/Express backend. The free instance currently has **0.1 CPU and 512 MB RAM**. It includes **750 free instance hours per workspace per month**. A free service spins down after 15 minutes without incoming traffic and starts again when a new request arrives, which can take about a minute.
+    USER ||--o{ OFFER : manages
+    USER ||--o{ INVOICE : manages
+    USER ||--o{ TICKET : creates
+    USER o|--o{ TICKET : assigned_to
 
-This is the platform I chose for the CRM backend.
+    OFFER o|--o{ INVOICE : source_for
+    OFFER o|--o{ TICKET : linked_to
 
-**Railway**
+    INVOICE o|--o{ TICKET : linked_to
+```
+--- 
 
-Railway also supports Node.js applications. Its Free plan has **no monthly subscription fee** and includes **$1 of resource usage per month**. The application consumes this credit depending on the resources it uses. A service can use up to **1 vCPU and 0.5 GB RAM**.
+### Database Schema
 
-Unlike Render's free instance model, Railway is more directly **usage-based**: the monthly credit pays for the resources the application consumes.
+The detailed ERD below shows the main database fields, primary keys, foreign keys, and relationships between the CRM entities:
 
-### 2. Database-as-a-Service Providers
+```mermaid
+erDiagram
+    COMPANY {
+        Int id PK
+        String name UK
+        String industry
+    }
 
-**Aiven PostgreSQL**
+    CONTACT {
+        Int id PK
+        String name
+        String email UK
+        Int companyId FK
+    }
 
-Aiven's Free PostgreSQL tier provides:
+    USER {
+        Int id PK
+        String name
+        String email UK
+        String passwordHash
+        Role role
+        DateTime createdAt
+    }
 
-- 1 CPU
-- 1 GB RAM
-- 1 GB storage
-- Maximum 20 database connections
-- No connection pooling
-- One free service of each type per organization
+    OFFER {
+        Int id PK
+        String description
+        Decimal amount
+        OfferStatus status
+        Int companyId FK
+        Int contactId FK "optional"
+        Int salesUserId FK
+        DateTime createdAt
+        DateTime updatedAt
+    }
 
-It does not require a credit card and has no fixed time limit. Aiven can power off inactive free databases, which can later be powered back on.
+    INVOICE {
+        Int id PK
+        Int offerId FK "optional"
+        Int companyId FK
+        Int contactId FK "optional"
+        Int salesUserId FK
+        String companyName
+        String contactName "optional"
+        String salesUserName
+        String description
+        Decimal amount
+        InvoiceStatus status
+        DateTime createdAt
+        DateTime updatedAt
+    }
 
-This is the database provider I chose for the CRM.
+    TICKET {
+        Int id PK
+        String subject
+        String description
+        TicketStatus status
+        TicketPriority priority
+        Int companyId FK
+        Int contactId FK
+        Int offerId FK "optional"
+        Int invoiceId FK "optional"
+        Int createdById FK
+        Int assignedUserId FK "optional"
+        DateTime createdAt
+        DateTime updatedAt
+    }
 
-**Supabase**
+    COMPANY ||--o{ CONTACT : has
+    COMPANY ||--o{ OFFER : has
+    COMPANY ||--o{ INVOICE : has
+    COMPANY ||--o{ TICKET : has
 
-Supabase's Free plan provides a PostgreSQL database with **500 MB database size**, shared CPU and up to **500 MB RAM**. It also includes 5 GB uncached egress, 5 GB cached egress, and 1 GB file storage. The Free plan allows two active projects.
+    CONTACT o|--o{ OFFER : linked_to
+    CONTACT o|--o{ INVOICE : linked_to
+    CONTACT ||--o{ TICKET : has
 
-Free projects with low activity over a seven-day period can be paused and later restored.
+    USER ||--o{ OFFER : manages
+    USER ||--o{ INVOICE : manages
+    USER ||--o{ TICKET : creates
+    USER o|--o{ TICKET : assigned_to
 
-### 3. Cost Analysis
+    OFFER o|--o{ INVOICE : source_for
+    OFFER o|--o{ TICKET : linked_to
+    INVOICE o|--o{ TICKET : linked_to
+```
+---
 
-For students who want to avoid unexpected costs, **Aiven Free and Supabase Free are straightforward database choices because their free resources have defined limits rather than automatically becoming paid services.** Aiven explicitly states that its Free PostgreSQL service does not require a credit card.
+### Role Workflows
 
-Railway's Free plan also requires no credit card, but its model is based on monthly usage credits. Moving to Hobby costs a minimum of **$5/month**, with additional resource usage charged beyond the included $5 credit.
+The API supports three user roles. The following diagrams show the main workflow and responsibilities of each role:
 
-Render's free Web Service is $0 compute, but its free workspace currently includes **5 GB of outbound bandwidth per month**, after which outbound bandwidth is priced at **$0.15/GB**. Therefore, usage limits and billing settings should still be checked before using it for a high-traffic application.
+#### **ADMIN**
+```mermaid
+flowchart LR
+    A[ADMIN]
 
-For a small student project, staying strictly within the free plans and monitoring usage is the safest approach.
+    A --> B[Manage Users]
 
-## Part 3: Understanding Free Tier Limits
+    A --> C[Manage Companies]
+    C --> D[Manage Contacts]
 
-### 1. RAM / Memory Limits
+    A --> E[Manage Offers]
+    E --> F[Assign Sales User]
+    E --> G[Create / Manage Invoices]
 
-RAM is the memory the application uses while it is running. Render's free service has **512 MB RAM**. If the app uses too much memory, it can become slow or crash.
+    A --> H[Manage Tickets]
+    H --> I[Assign User]
+```
 
-### 2. Cold Starts / Sleep Cycles
+---
 
-Free servers may go to sleep when nobody uses them. Render does this after **15 minutes of inactivity**. The next request can therefore take longer while the server starts again.
+#### **SALES**
 
-### 3. Compute Hours & CPU Quotas
+```mermaid
+flowchart LR
+    A[SALES]
 
-**Compute hours** are the amount of time the server is allowed to run. **CPU** is the processing power available to the application.
+    A --> B[Companies]
+    B --> C[Create / Update Companies]
 
-Render provides **750 free instance hours per month**. If the compute-hour limit is reached, the free service can no longer run until the limit resets. If the CPU is overloaded, users may notice slower responses.
+    A --> D[Contacts]
+    D --> E[Create / Update Contacts]
 
-### 4. Database Storage & Active Connections
+    A --> F[Create / Manage Offers]
+    A --> G[Create Direct Invoices]
+    F --> H[Create Invoices derived from Offers]
 
-**Database storage** is how much data can be saved in the database. Aiven's free PostgreSQL database provides **1 GB of storage**.
+    A --> I[Existing Tickets]
+    I --> J[Read / Update / Reassign]
+```
 
-**Database connections** are the number of connections that can be open to the database at the same time. Aiven allows up to **20 connections** on the free tier.
+---
 
-Prisma uses connection pooling to reuse connections. If all available connections are busy, new database requests may have to wait or fail.
+#### **SUPPORT** 
 
-### 5. Outbound Data Transfer / Bandwidth
 
-**Bandwidth** is the amount of data the server sends over the internet. For example, when the CRM API sends a JSON response to a user, this counts as outbound data.
+```mermaid
+flowchart LR
+    A[SUPPORT]
 
-Render includes **5 GB of outbound bandwidth per month** on the free tier. If an application has many users or sends large amounts of data, it can reach this limit faster.
+    A --> B[Companies]
+    B --> C[Create / Update Companies]
+
+    A --> D[Contacts]
+    D --> E[Create / Update Contacts]
+
+    A --> F[Read Offers]
+    A --> G[Read Invoices]
+
+    A --> H[Create / Manage Tickets]
+    H --> I[Link Company & Contact]
+    H --> J[Optionally Link Offer / Invoice]
+```
+
+---
+
+## 4. Authentication & Security
+
+### Authentication
+
+The API uses JSON Web Tokens (JWT) for authentication.
+
+Users log in with:
+
+`POST /api/auth/login`
+
+A successful login returns a JWT, which must be included in protected requests:
+
+```text
+Authorization: Bearer <token>
+```
+
+### Role-Based Authorization
+
+The API supports three roles:
+
+- **ADMIN** — full user management and broad access across CRM resources.
+- **SALES** — manages companies, contacts, offers, and invoices, and can read or update existing tickets.
+- **SUPPORT** — manages companies, contacts, and tickets, with read-only access to offers and invoices.
+
+Permissions are enforced at route level using authentication and role-authorization middleware.
+
+### Input Validation
+
+Request bodies, route parameters, filters, and pagination values are validated with **Zod** before database operations are performed.
+
+Invalid input returns a `400 Bad Request` response.
+
+### Password Security
+
+User passwords are hashed with **bcrypt** before being stored in the database. Plain-text passwords are not stored.
+
+### CORS
+
+CORS is configured to control which client origins may access the API.
+
+### Rate Limiting
+
+Rate limiting is applied to reduce abuse and protect sensitive endpoints such as authentication.
+
+### Error Handling
+
+Errors are handled centrally so API clients receive controlled responses without exposing internal implementation details.
+
+---
+
+## 5. API Endpoints
+
+The API is organized into seven main resources. The tables below provide an overview of the available endpoints, required access roles, and their purpose.
+
+### Authentication
+
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| POST | `/api/auth/login` | Public | Authenticate a user and return a JWT |
+
+### Users
+
+All user-management endpoints require the `ADMIN` role.
+
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/api/users` | ADMIN | Get all users |
+| GET | `/api/users/:id` | ADMIN | Get one user |
+| POST | `/api/users` | ADMIN | Create a user |
+| PATCH | `/api/users/:id` | ADMIN | Update a user |
+| DELETE | `/api/users/:id` | ADMIN | Delete a user |
+
+### Companies
+
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/api/companies` | ADMIN, SALES, SUPPORT | Get all companies |
+| GET | `/api/companies/:id` | ADMIN, SALES, SUPPORT | Get one company |
+| POST | `/api/companies` | ADMIN, SALES, SUPPORT | Create a company |
+| PATCH | `/api/companies/:id` | ADMIN, SALES, SUPPORT | Update a company |
+| DELETE | `/api/companies/:id` | ADMIN | Delete a company |
+
+Companies support search by name:
+
+```text
+GET /api/companies?search=stark
+```
+
+### Contacts
+
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/api/contacts` | ADMIN, SALES, SUPPORT | Get all contacts |
+| GET | `/api/contacts/:id` | ADMIN, SALES, SUPPORT | Get one contact |
+| POST | `/api/contacts` | ADMIN, SALES, SUPPORT | Create a contact |
+| PATCH | `/api/contacts/:id` | ADMIN, SALES, SUPPORT | Update a contact |
+| DELETE | `/api/contacts/:id` | ADMIN | Delete a contact |
+
+Contacts can be searched by name or email:
+
+```text
+GET /api/contacts?search=anna
+```
+
+### Offers
+
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/api/offers` | ADMIN, SALES, SUPPORT | Get offers |
+| GET | `/api/offers/:id` | ADMIN, SALES, SUPPORT | Get one offer |
+| POST | `/api/offers` | ADMIN, SALES | Create an offer |
+| PATCH | `/api/offers/:id` | ADMIN, SALES | Update an offer |
+
+Offers are not deleted. They can be moved to the `CANCELLED` status instead.
+
+Supported filters:
+
+```text
+GET /api/offers?status=SENT
+GET /api/offers?companyId=1
+GET /api/offers?salesUserId=2
+GET /api/offers?page=1&limit=10
+```
+
+### Invoices
+
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/api/invoices` | ADMIN, SALES, SUPPORT | Get invoices |
+| GET | `/api/invoices/:id` | ADMIN, SALES, SUPPORT | Get one invoice |
+| POST | `/api/invoices` | ADMIN, SALES | Create an invoice |
+| PATCH | `/api/invoices/:id` | ADMIN, SALES | Update an invoice |
+
+Invoices can be created either directly from CRM customer data or from an existing accepted Offer. An Offer may be associated with multiple Invoices. Invoices are not deleted.
+
+Supported filters:
+
+```text
+GET /api/invoices?status=PAID
+GET /api/invoices?companyId=1
+GET /api/invoices?page=1&limit=10
+```
+
+### Tickets
+
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| GET | `/api/tickets` | ADMIN, SALES, SUPPORT | Get tickets |
+| GET | `/api/tickets/:id` | ADMIN, SALES, SUPPORT | Get one ticket |
+| POST | `/api/tickets` | ADMIN, SUPPORT | Create a ticket |
+| PATCH | `/api/tickets/:id` | ADMIN, SALES, SUPPORT | Update a ticket |
+
+Tickets are closed through their status rather than deleted.
+
+Supported filters:
+
+```text
+GET /api/tickets?status=OPEN
+GET /api/tickets?priority=URGENT
+GET /api/tickets?assignedUserId=3
+GET /api/tickets?page=1&limit=10
+```
+---
+
+## 6. Setup & Testing
+
+### Prerequisites
+
+Make sure the following are installed:
+
+- Node.js
+- npm
+- PostgreSQL
+
+### Installation
+
+After cloning the repository, install the dependencies:
+
+```bash
+npm install
+```
+
+### Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+PORT=3000
+DATABASE_URL="your_postgresql_connection_string"
+JWT_SECRET="your_secret_key"
+```
+
+Do not commit the `.env` file or expose real credentials.
+
+### Database Setup
+
+Apply the Prisma migrations to the local development database:
+
+```bash
+npx prisma migrate dev
+```
+
+Seed the database if required:
+
+```bash
+npm run seed
+```
+
+### Run the API Locally
+
+Start the server:
+
+```bash
+npm start
+```
+
+By default, the API runs at:
+
+```text
+http://localhost:3000
+```
+
+### Testing
+
+The project uses **Jest** and **Supertest** for automated testing.
+
+The test suite covers:
+
+- successful requests
+- input validation
+- authentication and authorization
+- role permissions
+- relationship and business rules
+- filtering, search, and pagination
+- relevant error cases
+
+Run all tests with:
+
+```bash
+npm test
+```
+
+## 7. Deployment
+
+The API is deployed and publicly accessible at:
+
+**Live API:** `https://crm-backend-kids.onrender.com`
+
+The production deployment uses the same REST endpoints documented above.
+
+---
+
+## 8. Project Documentation & Author
+
+### Project Background
+
+This project was developed as an educational backend project at the Digital Career Institute (DCI).
+
+The design of the CRM and its role-based workflows was influenced by my own professional experience working in both sales and customer support. This experience helped guide decisions about the responsibilities of SALES and SUPPORT users and how companies, contacts, offers, invoices, and support tickets relate to each other.
+
+### Use of AI
+
+AI tools were used as educational and development support during this project.
+
+I used AI to discuss concepts, review code, troubleshoot problems, and better understand different implementation approaches. The application structure, business rules, and final implementation decisions were made based on my own understanding of the project requirements and my previous experience in sales and customer support.
+
+For automated testing, I first wrote tests myself to learn and understand the testing process. Codex was then used to help expand the test suite and test coverage. I reviewed the resulting tests and verified the behavior of the API.
+
+AI-generated suggestions were reviewed before being included in the project. I remained responsible for understanding, testing, and being able to explain the code used in the application.
+
+### Author
+
+**Iulia Roca**
+
+Backend Development Project  
+Digital Career Institute (DCI)

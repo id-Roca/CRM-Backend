@@ -1,12 +1,7 @@
 import prisma from "../prisma.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { z } from "zod";
-
-const loginSchema = z.object({
-  email: z.email("Invalid email address.").max(100),
-  password: z.string().min(6, "Password must be at least 6 characters."),
-});
+import loginSchema from "../schemas/authSchemas.js";
 
 export const login = async (req, res, next) => {
   try {

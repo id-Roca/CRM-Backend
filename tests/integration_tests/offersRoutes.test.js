@@ -708,7 +708,7 @@ describe("POST /api/offers", () => {
       .expect("Content-Type", /json/)
       .expect(403);
 
-    expect(response.body).toEqual({ success: false, message: "Only admins can assign another sales user." });
+    expect(response.body).toEqual({ success: false, message: "Forbidden" });
     expect(mockPrisma.offer.create).not.toHaveBeenCalled();
     expect(mockPrisma.user.findUnique).not.toHaveBeenCalled();
   });
@@ -843,43 +843,18 @@ describe("POST /api/offers", () => {
     });
   });
 
-  test("creates an offer for an authenticated support user", async () => {
+  test("returns 403 when an authenticated support user tries to create an offer", async () => {
     mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SUPPORT" });
-    const offer = {
-          id: 1,
-          description: "Consulting offer",
-          amount: 250,
-          status: "DRAFT",
-          company: { name: "Acme" },
-          contact: { name: "Anna" },
-          salesUser: { name: "Sales User" },
-          createdAt: "2026-01-01T00:00:00.000Z",
-          updatedAt: "2026-01-01T00:00:00.000Z",
-        };
-    mockPrisma.offer.create.mockResolvedValueOnce(offer);
-
     const response = await request(app)
       .post("/api/offers")
       .set("Authorization", "Bearer dummy-token")
       .send({ description: "Consulting offer", amount: 250, companyId: 1, contactId: 2 })
       .expect("Content-Type", /json/)
-      .expect(201);
+      .expect(403);
 
-    expect(response.body).toEqual(offer);
-    expect(mockPrisma.offer.create).toHaveBeenCalledWith({
-      data: { description: "Consulting offer", amount: 250, companyId: 1, contactId: 2, salesUserId: 1 },
-      select: {
-        id: true,
-        description: true,
-        amount: true,
-        status: true,
-        company: { select: { name: true } },
-        contact: { select: { name: true } },
-        salesUser: { select: { name: true } },
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    expect(response.body).toEqual({ success: false, message: "Forbidden" });
+    expect(mockPrisma.offer.create).not.toHaveBeenCalled();
+    expect(mockPrisma.contact.findUnique).not.toHaveBeenCalled();
   });
 
   test("returns 400 when the amount is not positive", async () => {
@@ -1007,7 +982,7 @@ describe("PATCH /api/offers/:id", () => {
       .expect("Content-Type", /json/)
       .expect(403);
 
-    expect(response.body).toEqual({ success: false, message: "Only admins can reassign an offer." });
+    expect(response.body).toEqual({ success: false, message: "Forbidden" });
     expect(mockPrisma.offer.update).not.toHaveBeenCalled();
     expect(mockPrisma.offer.findUnique).not.toHaveBeenCalled();
   });
@@ -1235,44 +1210,18 @@ describe("PATCH /api/offers/:id", () => {
     });
   });
 
-  test("updates an offer for an authenticated support user", async () => {
+  test("returns 403 when an authenticated support user tries to update an offer", async () => {
     mockJwt.verify.mockReturnValueOnce({ userId: 1, role: "SUPPORT" });
-    const offer = {
-          id: 1,
-          description: "Consulting offer",
-          amount: 250,
-          status: "SENT",
-          company: { name: "Acme" },
-          contact: { name: "Anna" },
-          salesUser: { name: "Sales User" },
-          createdAt: "2026-01-01T00:00:00.000Z",
-          updatedAt: "2026-01-01T00:00:00.000Z",
-        };
-    mockPrisma.offer.update.mockResolvedValueOnce(offer);
-
     const response = await request(app)
       .patch("/api/offers/1")
       .set("Authorization", "Bearer dummy-token")
       .send({ status: "SENT" })
       .expect("Content-Type", /json/)
-      .expect(200);
+      .expect(403);
 
-    expect(response.body).toEqual(offer);
-    expect(mockPrisma.offer.update).toHaveBeenCalledWith({
-      where: { id: 1 },
-      data: { description: undefined, amount: undefined, companyId: undefined, contactId: undefined, salesUserId: undefined, status: "SENT" },
-      select: {
-        id: true,
-        description: true,
-        amount: true,
-        status: true,
-        company: { select: { name: true } },
-        contact: { select: { name: true } },
-        salesUser: { select: { name: true } },
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    expect(response.body).toEqual({ success: false, message: "Forbidden" });
+    expect(mockPrisma.offer.update).not.toHaveBeenCalled();
+    expect(mockPrisma.offer.findUnique).not.toHaveBeenCalled();
   });
 
   test("returns 400 when no update fields are provided", async () => {

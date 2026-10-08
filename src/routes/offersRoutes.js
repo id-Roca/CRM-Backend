@@ -27,14 +27,14 @@ router.get(
 router.post(
     "/offers",
     authenticateToken,
-    authorizeRoles("ADMIN", "SALES", "SUPPORT"),
+    authorizeRoles("ADMIN", "SALES"),
     createNewOffer,
 );
 
 router.patch(
     "/offers/:id",
     authenticateToken,
-    authorizeRoles("ADMIN", "SALES", "SUPPORT"),
+    authorizeRoles("ADMIN", "SALES"),
     updateOffer,
 );
 

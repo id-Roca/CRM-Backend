@@ -1,57 +1,16 @@
 import prisma from "../prisma.js";
-import { z } from "zod";
+import {
+  createOfferSchema,
+  updateOfferSchema,
+  offerIdSchema,
+  offerFilterSchema,
+} from "../schemas/offerSchemas.js";
 
-const createOfferSchema = z
-  .object({
-    description: z
-      .string()
-      .min(3, "Description must be at least 3 characters."),
-    amount: z.number().positive("Amount must be greater than 0."),
-    companyId: z.number().int().positive(),
-    contactId: z.number().int().positive().optional(),
-    salesUserId: z.number().int().positive().optional(),
-  })
-  .strict();
-
-const updateOfferSchema = z
-  .object({
-    description: z
-      .string()
-      .min(3, "Description must be at least 3 characters.")
-      .optional(),
-    amount: z.number().positive("Amount must be greater than 0.").optional(),
-    companyId: z.number().int().positive().optional(),
-    contactId: z.number().int().positive().nullable().optional(),
-    salesUserId: z.number().int().positive().optional(),
-    status: z
-      .enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "CANCELLED"])
-      .optional(),
-  })
-  .strict()
-  .refine((data) => Object.keys(data).length > 0, {
-    message: "At least one field is required.",
-  });
-
-const offerIdSchema = z.coerce
-  .number({
-    error: "Offer ID must be a number.",
-  })
-  .int()
-  .positive("Offer ID must be a positive number.");
-
-const offerFilterSchema = z
-  .object({
-    status: z
-      .enum(["DRAFT", "SENT", "ACCEPTED", "REJECTED", "CANCELLED"], {
-        error: "Status must be DRAFT, SENT, ACCEPTED, REJECTED or CANCELLED.",
-      })
-      .optional(),
-    companyId: z.coerce.number().int().positive().optional(),
-    salesUserId: z.coerce.number().int().positive().optional(),
-    page: z.coerce.number().int().positive().default(1),
-    limit: z.coerce.number().int().positive().default(10),
-  })
-  .strict();
+import {
+  getValidOfferContact,
+  offerDetailSelect,
+  getValidOfferSalesUser,
+} from "../helpers/offerHelper.js";
 
 // GET all offers
 export const getAllOffers = async (req, res, next) => {
@@ -189,38 +148,10 @@ export const createNewOffer = async (req, res, next) => {
     let contact = null;
 
     if (contactId !== undefined) {
-      contact = await prisma.contact.findUnique({
-        where: {
-          id: contactId,
-        },
-      });
-
-      if (!contact) {
-        const error = new Error("Contact not found.");
-        error.statusCode = 404;
-        throw error;
-      }
-
-      if (contact.companyId !== companyId) {
-        const error = new Error(
-          "Contact does not belong to the selected company.",
-        );
-        error.statusCode = 400;
-        throw error;
-      }
+      contact = await getValidOfferContact(contactId, companyId);
     }
 
-    const assignedUser = await prisma.user.findUnique({
-      where: {
-        id: salesUserId,
-      },
-    });
-
-    if (!assignedUser) {
-      const error = new Error("Sales user not found.");
-      error.statusCode = 404;
-      throw error;
-    }
+    await getValidOfferSalesUser(salesUserId);
 
     const newOffer = await prisma.offer.create({
       data: {
@@ -230,29 +161,7 @@ export const createNewOffer = async (req, res, next) => {
         contactId: contact?.id ?? null,
         salesUserId,
       },
-      select: {
-        id: true,
-        description: true,
-        amount: true,
-        status: true,
-        company: {
-          select: {
-            name: true,
-          },
-        },
-        contact: {
-          select: {
-            name: true,
-          },
-        },
-        salesUser: {
-          select: {
-            name: true,
-          },
-        },
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: offerDetailSelect,
     });
 
     res.status(201).json(newOffer);
@@ -311,39 +220,11 @@ export const updateOffer = async (req, res, next) => {
       contactId !== undefined ? contactId : existingOffer.contactId;
 
     if (effectiveContactId !== null) {
-      const contact = await prisma.contact.findUnique({
-        where: {
-          id: effectiveContactId,
-        },
-      });
-
-      if (!contact) {
-        const error = new Error("Contact not found.");
-        error.statusCode = 404;
-        throw error;
-      }
-
-      if (contact.companyId !== effectiveCompanyId) {
-        const error = new Error(
-          "Contact does not belong to the selected company.",
-        );
-        error.statusCode = 400;
-        throw error;
-      }
+      await getValidOfferContact(effectiveContactId, effectiveCompanyId);
     }
 
     if (salesUserId !== undefined) {
-      const assignedUser = await prisma.user.findUnique({
-        where: {
-          id: salesUserId,
-        },
-      });
-
-      if (!assignedUser) {
-        const error = new Error("Sales user not found.");
-        error.statusCode = 404;
-        throw error;
-      }
+      await getValidOfferSalesUser(salesUserId);
     }
 
     const updatedOffer = await prisma.offer.update({
@@ -358,29 +239,7 @@ export const updateOffer = async (req, res, next) => {
         salesUserId,
         status,
       },
-      select: {
-        id: true,
-        description: true,
-        amount: true,
-        status: true,
-        company: {
-          select: {
-            name: true,
-          },
-        },
-        contact: {
-          select: {
-            name: true,
-          },
-        },
-        salesUser: {
-          select: {
-            name: true,
-          },
-        },
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: offerDetailSelect,
     });
 
     res.json(updatedOffer);

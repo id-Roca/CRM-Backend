@@ -1,60 +1,20 @@
 import prisma from "../prisma.js";
-import { z } from "zod";
+import {
+  createInvoiceFromOfferSchema,
+  createDirectInvoiceSchema,
+  updateInvoiceSchema,
+  invoiceIdSchema,
+  invoiceFilterSchema,
+} from "../schemas/invoiceSchemas.js";
 
-const createInvoiceFromOfferSchema = z
-  .object({
-    offerId: z.number().int().positive(),
-  })
-  .strict();
-
-const createDirectInvoiceSchema = z
-  .object({
-    description: z
-      .string()
-      .min(3, "Description must be at least 3 characters."),
-    amount: z.number().positive("Amount must be greater than 0."),
-    companyId: z.number().int().positive(),
-    contactId: z.number().int().positive().optional(),
-    salesUserId: z.number().int().positive().optional(),
-  })
-  .strict();
-
-const updateInvoiceSchema = z
-  .object({
-    description: z
-      .string()
-      .min(3, "Description must be at least 3 characters.")
-      .optional(),
-    amount: z.number().positive("Amount must be greater than 0.").optional(),
-    companyId: z.number().int().positive().optional(),
-    contactId: z.number().int().positive().nullable().optional(),
-    salesUserId: z.number().int().positive().optional(),
-    status: z.enum(["DRAFT", "ISSUED", "PAID", "CANCELLED"]).optional(),
-  })
-  .strict()
-  .refine((data) => Object.keys(data).length > 0, {
-    message: "At least one field is required.",
-  });
-
-const invoiceIdSchema = z.coerce
-  .number({
-    error: "Invoice ID must be a number.",
-  })
-  .int()
-  .positive("Invoice ID must be a positive number.");
-
-const invoiceFilterSchema = z
-  .object({
-    status: z
-      .enum(["DRAFT", "ISSUED", "PAID", "CANCELLED"], {
-        error: "Status must be DRAFT, ISSUED, PAID or CANCELLED.",
-      })
-      .optional(),
-    companyId: z.coerce.number().int().positive().optional(),
-    page: z.coerce.number().int().positive().default(1),
-    limit: z.coerce.number().int().positive().default(10),
-  })
-  .strict();
+import {
+  validateInvoiceCompanyAndContact,
+  getValidInvoiceSalesUser,
+  buildDirectInvoiceCreateData,
+  getValidOfferForInvoice,
+  buildInvoiceFromOfferCreateData,
+  getValidInvoiceContact,
+} from "../helpers/invoiceHelpers.js";
 
 export const getAllInvoices = async (req, res, next) => {
   try {
@@ -187,66 +147,10 @@ export const createNewInvoice = async (req, res, next) => {
     if (isOfferInvoice) {
       const { offerId } = result.data;
 
-      const offer = await prisma.offer.findUnique({
-        where: {
-          id: offerId,
-        },
-        include: {
-          company: true,
-          contact: true,
-          salesUser: true,
-        },
-      });
-
-      if (!offer) {
-        const error = new Error("Offer not found.");
-        error.statusCode = 404;
-        throw error;
-      }
-
-      if (offer.status !== "ACCEPTED") {
-        const error = new Error(
-          "An invoice can only be created from an accepted offer.",
-        );
-        error.statusCode = 400;
-        throw error;
-      }
+      const offer = await getValidOfferForInvoice(offerId);
 
       const newInvoiceFromOffer = await prisma.invoice.create({
-        data: {
-          offer: {
-            connect: {
-              id: offer.id,
-            },
-          },
-
-          company: {
-            connect: {
-              id: offer.companyId,
-            },
-          },
-
-          ...(offer.contactId !== null && {
-            contact: {
-              connect: {
-                id: offer.contactId,
-              },
-            },
-          }),
-
-          salesUser: {
-            connect: {
-              id: offer.salesUserId,
-            },
-          },
-
-          companyName: offer.company.name,
-          contactName: offer.contact?.name ?? null,
-          salesUserName: offer.salesUser.name,
-
-          description: offer.description,
-          amount: offer.amount,
-        },
+        data: buildInvoiceFromOfferCreateData(offer),
       });
 
       return res.status(201).json(newInvoiceFromOffer);
@@ -274,87 +178,24 @@ export const createNewInvoice = async (req, res, next) => {
         ? requestedSalesUserId
         : req.user.userId;
 
-    // COMPANY
-    const company = await prisma.company.findUnique({
-      where: {
-        id: companyId,
-      },
-    });
+    // VALIDATE COMPANY AND OPTIONAL CONTACT
+    const { company, contact } = await validateInvoiceCompanyAndContact(
+      companyId,
+      contactId,
+    );
 
-    if (!company) {
-      const error = new Error("Company not found.");
-      error.statusCode = 404;
-      throw error;
-    }
-
-    // OPTIONAL CONTACT
-    let contact = null;
-
-    if (contactId !== undefined) {
-      contact = await prisma.contact.findUnique({
-        where: {
-          id: contactId,
-        },
-      });
-
-      if (!contact) {
-        const error = new Error("Contact not found.");
-        error.statusCode = 404;
-        throw error;
-      }
-
-      if (contact.companyId !== companyId) {
-        const error = new Error(
-          "Contact does not belong to the selected company.",
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-    }
-
-    // SALES USER
-    const salesUser = await prisma.user.findUnique({
-      where: {
-        id: salesUserId,
-      },
-    });
-
-    if (!salesUser) {
-      const error = new Error("Sales user not found.");
-      error.statusCode = 404;
-      throw error;
-    }
+    // VALIDATE SALES USER
+    const salesUser = await getValidInvoiceSalesUser(salesUserId);
 
     // CREATE DIRECT INVOICE
     const newDirectInvoice = await prisma.invoice.create({
-      data: {
-        company: {
-          connect: {
-            id: company.id,
-          },
-        },
-
-        ...(contact !== null && {
-          contact: {
-            connect: {
-              id: contact.id,
-            },
-          },
-        }),
-
-        salesUser: {
-          connect: {
-            id: salesUser.id,
-          },
-        },
-
-        companyName: company.name,
-        contactName: contact?.name ?? null,
-        salesUserName: salesUser.name,
-
+      data: buildDirectInvoiceCreateData({
         description,
         amount,
-      },
+        company,
+        contact,
+        salesUser,
+      }),
     });
 
     return res.status(201).json(newDirectInvoice);
@@ -408,26 +249,13 @@ export const updateInvoice = async (req, res, next) => {
     }
 
     // DETERMINE WHICH COMPANY SHOULD BE USED FOR RELATIONSHIP CHECKS
-    //
-    // If companyId was sent in the request, use the new company.
-    // Otherwise, keep using the invoice's existing company.
     const effectiveCompanyId = companyId ?? existingInvoice.companyId;
 
     // DETERMINE WHICH CONTACT SHOULD BE USED FOR RELATIONSHIP CHECKS
-    //
-    // undefined = contact was not included in the request,
-    //             so keep the existing contact
-    //
-    // number    = client wants to assign/change the contact
-    //
-    // null      = client wants to remove the contact
     const effectiveContactId =
       contactId !== undefined ? contactId : existingInvoice.contactId;
 
     // BUILD THE UPDATE OBJECT
-    //
-    // Fields that were not provided will be undefined.
-    // Prisma ignores undefined fields in the update data.
     const invoiceUpdates = {
       description,
       amount,
@@ -462,29 +290,11 @@ export const updateInvoice = async (req, res, next) => {
 
     // CONTACT CHECK / CHANGE
     else if (effectiveContactId !== null) {
-      const contact = await prisma.contact.findUnique({
-        where: {
-          id: effectiveContactId,
-        },
-      });
+      const contact = await getValidInvoiceContact(
+        effectiveContactId,
+        effectiveCompanyId,
+      );
 
-      if (!contact) {
-        const error = new Error("Contact not found.");
-        error.statusCode = 404;
-        throw error;
-      }
-
-      // The contact must belong to the invoice's effective company
-      if (contact.companyId !== effectiveCompanyId) {
-        const error = new Error(
-          "Contact does not belong to the selected company.",
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-
-      // Only update the contact fields if contactId was actually
-      // included in the request.
       if (contactId !== undefined) {
         invoiceUpdates.contactId = contact.id;
         invoiceUpdates.contactName = contact.name;
@@ -493,22 +303,10 @@ export const updateInvoice = async (req, res, next) => {
 
     // ADMIN CAN REASSIGN RESPONSIBLE SALES USER
     if (salesUserId !== undefined) {
-      // Check that the requested user exists
-      const assignedUser = await prisma.user.findUnique({
-        where: {
-          id: salesUserId,
-        },
-      });
-
-      if (!assignedUser) {
-        const error = new Error("Sales user not found.");
-        error.statusCode = 404;
-        throw error;
-      }
-
+      const salesUser = await getValidInvoiceSalesUser(salesUserId);
       // Update both the relation ID and stored sales-user-name snapshot
-      invoiceUpdates.salesUserId = assignedUser.id;
-      invoiceUpdates.salesUserName = assignedUser.name;
+      invoiceUpdates.salesUserId = salesUser.id;
+      invoiceUpdates.salesUserName = salesUser.name;
     }
 
     // UPDATE THE INVOICE
