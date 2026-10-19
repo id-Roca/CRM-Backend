@@ -1,3 +1,4 @@
+import { withRelationshipTransaction } from "../helpers/relationshipHelpers.js";
 import prisma from "../prisma.js";
 import {
   createTicketSchema,
@@ -178,35 +179,37 @@ export const createNewTicket = async (req, res, next) => {
           ? req.user.userId
           : null;
 
-    await validateCompanyAndContact(companyId, contactId);
+    const newTicket = await withRelationshipTransaction(async (db) => {
+      await validateCompanyAndContact(companyId, contactId, db);
 
-    // OPTIONAL OFFER
-    if (offerId !== undefined) {
-      await getValidOfferForTicket(offerId, companyId, contactId);
-    }
+      // OPTIONAL OFFER
+      if (offerId !== undefined) {
+        await getValidOfferForTicket(offerId, companyId, contactId, "selected", db);
+      }
 
-    // OPTIONAL INVOICE
-    if (invoiceId !== undefined) {
-      await getValidInvoiceForTicket(invoiceId, companyId, contactId);
-    }
+      // OPTIONAL INVOICE
+      if (invoiceId !== undefined) {
+        await getValidInvoiceForTicket(invoiceId, companyId, contactId, "selected", db);
+      }
 
-    await validateAssignedUser(assignedUserId);
+      await validateAssignedUser(assignedUserId, db);
 
-    const newTicket = await prisma.ticket.create({
-      data: buildTicketCreateData({
-        subject,
-        description,
-        status,
-        priority,
-        companyId,
-        contactId,
-        createdById,
-        offerId,
-        invoiceId,
-        assignedUserId,
-      }),
+      return await db.ticket.create({
+        data: buildTicketCreateData({
+          subject,
+          description,
+          status,
+          priority,
+          companyId,
+          contactId,
+          createdById,
+          offerId,
+          invoiceId,
+          assignedUserId,
+        }),
 
-      select: ticketDetailSelect,
+        select: ticketDetailSelect,
+      });
     });
 
     res.status(201).json(newTicket);
@@ -243,94 +246,98 @@ export const updateTicket = async (req, res, next) => {
       assignedUserId,
     } = result.data;
 
-    // The existing ticket is needed because companyId and contactId
-    // are fixed after creation.
-    const existingTicket = await prisma.ticket.findUnique({
-      where: {
-        id: id.data,
-      },
-    });
+    const updatedTicket = await withRelationshipTransaction(async (db) => {
+      // The existing ticket is needed because companyId and contactId
+      // are fixed after creation.
+      const existingTicket = await db.ticket.findUnique({
+        where: {
+          id: id.data,
+        },
+      });
 
-    if (!existingTicket) {
-      const error = new Error("Ticket not found.");
-      error.statusCode = 404;
-      throw error;
-    }
-
-    const ticketUpdates = {
-      subject,
-      description,
-      status,
-      priority,
-    };
-
-// OPTIONAL ASSIGNMENT
-if (assignedUserId !== undefined) {
-  if (assignedUserId === null) {
-    ticketUpdates.assignedUser = {
-      disconnect: true,
-    };
-  } else {
-    await validateAssignedUser(assignedUserId);
-
-    ticketUpdates.assignedUser = {
-      connect: {
-        id: assignedUserId,
-      },
-    };
-  }
-}
-
-    // OPTIONAL OFFER
-    if (offerId !== undefined) {
-      if (offerId === null) {
-        ticketUpdates.offer = {
-          disconnect: true,
-        };
-      } else {
-        await getValidOfferForTicket(
-          offerId,
-          existingTicket.companyId,
-          existingTicket.contactId,
-          "ticket",
-        );
-
-        ticketUpdates.offer = {
-          connect: {
-            id: offerId,
-          },
-        };
+      if (!existingTicket) {
+        const error = new Error("Ticket not found.");
+        error.statusCode = 404;
+        throw error;
       }
-    }
 
-    // OPTIONAL INVOICE
-    if (invoiceId !== undefined) {
-      if (invoiceId === null) {
-        ticketUpdates.invoice = {
-          disconnect: true,
-        };
-      } else {
-        await getValidInvoiceForTicket(
-          invoiceId,
-          existingTicket.companyId,
-          existingTicket.contactId,
-          "ticket",
-        );
+      const ticketUpdates = {
+        subject,
+        description,
+        status,
+        priority,
+      };
 
-        ticketUpdates.invoice = {
-          connect: {
-            id: invoiceId,
-          },
-        };
+      // OPTIONAL ASSIGNMENT
+      if (assignedUserId !== undefined) {
+        if (assignedUserId === null) {
+          ticketUpdates.assignedUser = {
+            disconnect: true,
+          };
+        } else {
+          await validateAssignedUser(assignedUserId, db);
+
+          ticketUpdates.assignedUser = {
+            connect: {
+              id: assignedUserId,
+            },
+          };
+        }
       }
-    }
 
-    const updatedTicket = await prisma.ticket.update({
-      where: {
-        id: id.data,
-      },
-      data: ticketUpdates,
-      select: ticketDetailSelect,
+      // OPTIONAL OFFER
+      if (offerId !== undefined) {
+        if (offerId === null) {
+          ticketUpdates.offer = {
+            disconnect: true,
+          };
+        } else {
+          await getValidOfferForTicket(
+            offerId,
+            existingTicket.companyId,
+            existingTicket.contactId,
+            "ticket",
+            db,
+          );
+
+          ticketUpdates.offer = {
+            connect: {
+              id: offerId,
+            },
+          };
+        }
+      }
+
+      // OPTIONAL INVOICE
+      if (invoiceId !== undefined) {
+        if (invoiceId === null) {
+          ticketUpdates.invoice = {
+            disconnect: true,
+          };
+        } else {
+          await getValidInvoiceForTicket(
+            invoiceId,
+            existingTicket.companyId,
+            existingTicket.contactId,
+            "ticket",
+            db,
+          );
+
+          ticketUpdates.invoice = {
+            connect: {
+              id: invoiceId,
+            },
+          };
+        }
+      }
+
+      return await db.ticket.update({
+        where: {
+          id: id.data,
+        },
+        data: ticketUpdates,
+        select: ticketDetailSelect,
+      });
     });
 
     res.json(updatedTicket);

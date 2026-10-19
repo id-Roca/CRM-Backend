@@ -1,3 +1,4 @@
+import { relationshipPrisma } from "../../helpers/relationshipPrisma.js";
 import { beforeAll, beforeEach, describe, expect, jest, test } from "@jest/globals";
 
 const mockPrisma = {
@@ -9,7 +10,7 @@ const mockPrisma = {
   user: { findUnique: jest.fn() },
 };
 
-jest.unstable_mockModule("../../../src/prisma.js", () => ({ default: mockPrisma }));
+jest.unstable_mockModule("../../../src/prisma.js", () => ({ default: relationshipPrisma(mockPrisma) }));
 
 let getAllTickets, getTicketById, createNewTicket, updateTicket;
 beforeAll(async () => {

@@ -1,3 +1,4 @@
+import { authenticatedPrisma } from "../helpers/authenticatedPrisma.js";
 import {
   beforeAll,
   beforeEach,
@@ -24,7 +25,7 @@ const mockPrisma = {
 };
 
 jest.unstable_mockModule("../../src/prisma.js", () => ({
-  default: mockPrisma,
+  default: authenticatedPrisma(mockPrisma, mockJwt),
 }));
 
 const mockJwt = { verify: jest.fn() };

@@ -67,7 +67,8 @@ erDiagram
 
     INVOICE o|--o{ TICKET : linked_to
 ```
---- 
+
+---
 
 ### Database Schema
 
@@ -93,9 +94,10 @@ erDiagram
         String name
         String email UK
         String passwordHash
+        Int tokenVersion
         Role role
         DateTime createdAt
-    }
+}
 
     OFFER {
         Int id PK
@@ -159,6 +161,7 @@ erDiagram
     OFFER o|--o{ TICKET : linked_to
     INVOICE o|--o{ TICKET : linked_to
 ```
+
 ---
 
 ### Role Workflows
@@ -166,6 +169,7 @@ erDiagram
 The API supports three user roles. The following diagrams show the main workflow and responsibilities of each role:
 
 #### **ADMIN**
+
 ```mermaid
 flowchart LR
     A[ADMIN]
@@ -207,8 +211,7 @@ flowchart LR
 
 ---
 
-#### **SUPPORT** 
-
+#### **SUPPORT**
 
 ```mermaid
 flowchart LR
@@ -256,9 +259,13 @@ The API supports three roles:
 
 Permissions are enforced at route level using authentication and role-authorization middleware.
 
+Authentication verifies the user's current database role on every protected request. Deleted users lose access immediately, and password changes invalidate previously issued JWTs through token versioning.
+
 ### Input Validation
 
 Request bodies, route parameters, filters, and pagination values are validated with **Zod** before database operations are performed.
+
+Relationship consistency checks prevent updates that would invalidate existing links between Contacts, Companies, Offers, Invoices, and Tickets. Conflicting updates return `409 Conflict`.
 
 Invalid input returns a `400 Bad Request` response.
 
@@ -286,31 +293,31 @@ The API is organized into seven main resources. The tables below provide an over
 
 ### Authentication
 
-| Method | Endpoint | Access | Purpose |
-|---|---|---|---|
-| POST | `/api/auth/login` | Public | Authenticate a user and return a JWT |
+| Method | Endpoint          | Access | Purpose                              |
+| ------ | ----------------- | ------ | ------------------------------------ |
+| POST   | `/api/auth/login` | Public | Authenticate a user and return a JWT |
 
 ### Users
 
 All user-management endpoints require the `ADMIN` role.
 
-| Method | Endpoint | Access | Purpose |
-|---|---|---|---|
-| GET | `/api/users` | ADMIN | Get all users |
-| GET | `/api/users/:id` | ADMIN | Get one user |
-| POST | `/api/users` | ADMIN | Create a user |
-| PATCH | `/api/users/:id` | ADMIN | Update a user |
-| DELETE | `/api/users/:id` | ADMIN | Delete a user |
+| Method | Endpoint         | Access | Purpose       |
+| ------ | ---------------- | ------ | ------------- |
+| GET    | `/api/users`     | ADMIN  | Get all users |
+| GET    | `/api/users/:id` | ADMIN  | Get one user  |
+| POST   | `/api/users`     | ADMIN  | Create a user |
+| PATCH  | `/api/users/:id` | ADMIN  | Update a user |
+| DELETE | `/api/users/:id` | ADMIN  | Delete a user |
 
 ### Companies
 
-| Method | Endpoint | Access | Purpose |
-|---|---|---|---|
-| GET | `/api/companies` | ADMIN, SALES, SUPPORT | Get all companies |
-| GET | `/api/companies/:id` | ADMIN, SALES, SUPPORT | Get one company |
-| POST | `/api/companies` | ADMIN, SALES, SUPPORT | Create a company |
-| PATCH | `/api/companies/:id` | ADMIN, SALES, SUPPORT | Update a company |
-| DELETE | `/api/companies/:id` | ADMIN | Delete a company |
+| Method | Endpoint             | Access                | Purpose           |
+| ------ | -------------------- | --------------------- | ----------------- |
+| GET    | `/api/companies`     | ADMIN, SALES, SUPPORT | Get all companies |
+| GET    | `/api/companies/:id` | ADMIN, SALES, SUPPORT | Get one company   |
+| POST   | `/api/companies`     | ADMIN, SALES, SUPPORT | Create a company  |
+| PATCH  | `/api/companies/:id` | ADMIN, SALES, SUPPORT | Update a company  |
+| DELETE | `/api/companies/:id` | ADMIN                 | Delete a company  |
 
 Companies support search by name:
 
@@ -320,13 +327,13 @@ GET /api/companies?search=stark
 
 ### Contacts
 
-| Method | Endpoint | Access | Purpose |
-|---|---|---|---|
-| GET | `/api/contacts` | ADMIN, SALES, SUPPORT | Get all contacts |
-| GET | `/api/contacts/:id` | ADMIN, SALES, SUPPORT | Get one contact |
-| POST | `/api/contacts` | ADMIN, SALES, SUPPORT | Create a contact |
-| PATCH | `/api/contacts/:id` | ADMIN, SALES, SUPPORT | Update a contact |
-| DELETE | `/api/contacts/:id` | ADMIN | Delete a contact |
+| Method | Endpoint            | Access                | Purpose          |
+| ------ | ------------------- | --------------------- | ---------------- |
+| GET    | `/api/contacts`     | ADMIN, SALES, SUPPORT | Get all contacts |
+| GET    | `/api/contacts/:id` | ADMIN, SALES, SUPPORT | Get one contact  |
+| POST   | `/api/contacts`     | ADMIN, SALES, SUPPORT | Create a contact |
+| PATCH  | `/api/contacts/:id` | ADMIN, SALES, SUPPORT | Update a contact |
+| DELETE | `/api/contacts/:id` | ADMIN                 | Delete a contact |
 
 Contacts can be searched by name or email:
 
@@ -336,12 +343,12 @@ GET /api/contacts?search=anna
 
 ### Offers
 
-| Method | Endpoint | Access | Purpose |
-|---|---|---|---|
-| GET | `/api/offers` | ADMIN, SALES, SUPPORT | Get offers |
-| GET | `/api/offers/:id` | ADMIN, SALES, SUPPORT | Get one offer |
-| POST | `/api/offers` | ADMIN, SALES | Create an offer |
-| PATCH | `/api/offers/:id` | ADMIN, SALES | Update an offer |
+| Method | Endpoint          | Access                | Purpose         |
+| ------ | ----------------- | --------------------- | --------------- |
+| GET    | `/api/offers`     | ADMIN, SALES, SUPPORT | Get offers      |
+| GET    | `/api/offers/:id` | ADMIN, SALES, SUPPORT | Get one offer   |
+| POST   | `/api/offers`     | ADMIN, SALES          | Create an offer |
+| PATCH  | `/api/offers/:id` | ADMIN, SALES          | Update an offer |
 
 Offers are not deleted. They can be moved to the `CANCELLED` status instead.
 
@@ -356,12 +363,12 @@ GET /api/offers?page=1&limit=10
 
 ### Invoices
 
-| Method | Endpoint | Access | Purpose |
-|---|---|---|---|
-| GET | `/api/invoices` | ADMIN, SALES, SUPPORT | Get invoices |
-| GET | `/api/invoices/:id` | ADMIN, SALES, SUPPORT | Get one invoice |
-| POST | `/api/invoices` | ADMIN, SALES | Create an invoice |
-| PATCH | `/api/invoices/:id` | ADMIN, SALES | Update an invoice |
+| Method | Endpoint            | Access                | Purpose           |
+| ------ | ------------------- | --------------------- | ----------------- |
+| GET    | `/api/invoices`     | ADMIN, SALES, SUPPORT | Get invoices      |
+| GET    | `/api/invoices/:id` | ADMIN, SALES, SUPPORT | Get one invoice   |
+| POST   | `/api/invoices`     | ADMIN, SALES          | Create an invoice |
+| PATCH  | `/api/invoices/:id` | ADMIN, SALES          | Update an invoice |
 
 Invoices can be created either directly from CRM customer data or from an existing accepted Offer. An Offer may be associated with multiple Invoices. Invoices are not deleted.
 
@@ -375,12 +382,12 @@ GET /api/invoices?page=1&limit=10
 
 ### Tickets
 
-| Method | Endpoint | Access | Purpose |
-|---|---|---|---|
-| GET | `/api/tickets` | ADMIN, SALES, SUPPORT | Get tickets |
-| GET | `/api/tickets/:id` | ADMIN, SALES, SUPPORT | Get one ticket |
-| POST | `/api/tickets` | ADMIN, SUPPORT | Create a ticket |
-| PATCH | `/api/tickets/:id` | ADMIN, SALES, SUPPORT | Update a ticket |
+| Method | Endpoint           | Access                | Purpose         |
+| ------ | ------------------ | --------------------- | --------------- |
+| GET    | `/api/tickets`     | ADMIN, SALES, SUPPORT | Get tickets     |
+| GET    | `/api/tickets/:id` | ADMIN, SALES, SUPPORT | Get one ticket  |
+| POST   | `/api/tickets`     | ADMIN, SUPPORT        | Create a ticket |
+| PATCH  | `/api/tickets/:id` | ADMIN, SALES, SUPPORT | Update a ticket |
 
 Tickets are closed through their status rather than deleted.
 
@@ -392,6 +399,7 @@ GET /api/tickets?priority=URGENT
 GET /api/tickets?assignedUserId=3
 GET /api/tickets?page=1&limit=10
 ```
+
 ---
 
 ## 6. Setup & Testing
@@ -479,6 +487,8 @@ The API is deployed and publicly accessible at:
 **Live API:** `https://crm-backend-kids.onrender.com`
 
 The production deployment uses the same REST endpoints documented above.
+
+Demo credentials for testing the protected API endpoints are available upon request.
 
 ---
 

@@ -713,6 +713,7 @@ describe("updateUser", () => {
         email: "updated@crm.local",
         role: "SUPPORT",
         passwordHash: "new-hashed-password",
+        tokenVersion: { increment: 1 },
       },
       select: {
         id: true,

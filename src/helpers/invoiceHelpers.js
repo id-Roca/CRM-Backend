@@ -3,8 +3,9 @@ import prisma from "../prisma.js";
 export const validateInvoiceCompanyAndContact = async (
   companyId,
   contactId,
+  db = prisma,
 ) => {
-  const company = await prisma.company.findUnique({
+  const company = await db.company.findUnique({
     where: {
       id: companyId,
     },
@@ -19,7 +20,7 @@ export const validateInvoiceCompanyAndContact = async (
   let contact = null;
 
   if (contactId !== undefined) {
-    contact = await prisma.contact.findUnique({
+    contact = await db.contact.findUnique({
       where: {
         id: contactId,
       },
@@ -43,8 +44,8 @@ export const validateInvoiceCompanyAndContact = async (
   return { company, contact };
 };
 
-export const getValidInvoiceSalesUser = async (salesUserId) => {
-  const salesUser = await prisma.user.findUnique({
+export const getValidInvoiceSalesUser = async (salesUserId, db = prisma) => {
+  const salesUser = await db.user.findUnique({
     where: {
       id: salesUserId,
     },
@@ -94,8 +95,8 @@ export const buildDirectInvoiceCreateData = ({
   amount,
 });
 
-export const getValidOfferForInvoice = async (offerId) => {
-  const offer = await prisma.offer.findUnique({
+export const getValidOfferForInvoice = async (offerId, db = prisma) => {
+  const offer = await db.offer.findUnique({
     where: {
       id: offerId,
     },
@@ -158,8 +159,8 @@ export const buildInvoiceFromOfferCreateData = (offer) => ({
   amount: offer.amount,
 });
 
-export const getValidInvoiceContact = async (contactId, companyId) => {
-  const contact = await prisma.contact.findUnique({
+export const getValidInvoiceContact = async (contactId, companyId, db = prisma) => {
+  const contact = await db.contact.findUnique({
     where: {
       id: contactId,
     },

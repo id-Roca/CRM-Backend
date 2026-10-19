@@ -1,3 +1,7 @@
+import {
+  withRelationshipTransaction,
+  assertDocumentTicketCompatibility,
+} from "../helpers/relationshipHelpers.js";
 import prisma from "../prisma.js";
 import {
   createInvoiceFromOfferSchema,
@@ -143,62 +147,66 @@ export const createNewInvoice = async (req, res, next) => {
       throw error;
     }
 
-    // INVOICE CREATED FROM AN ACCEPTED OFFER
-    if (isOfferInvoice) {
-      const { offerId } = result.data;
+    const newInvoice = await withRelationshipTransaction(async (db) => {
+      // INVOICE CREATED FROM AN ACCEPTED OFFER
+      if (isOfferInvoice) {
+        const { offerId } = result.data;
 
-      const offer = await getValidOfferForInvoice(offerId);
+        const offer = await getValidOfferForInvoice(offerId, db);
 
-      const newInvoiceFromOffer = await prisma.invoice.create({
-        data: buildInvoiceFromOfferCreateData(offer),
-      });
+        const newInvoiceFromOffer = await db.invoice.create({
+          data: buildInvoiceFromOfferCreateData(offer),
+        });
 
-      return res.status(201).json(newInvoiceFromOffer);
-    }
+        return newInvoiceFromOffer;
+      }
 
-    // DIRECT INVOICE
-    const {
-      description,
-      amount,
-      companyId,
-      contactId,
-      salesUserId: requestedSalesUserId,
-    } = result.data;
-
-    // SALES users may not assign an invoice to another user.
-    // ADMIN may optionally choose another user.
-    if (req.user.role !== "ADMIN" && requestedSalesUserId !== undefined) {
-      const error = new Error("Only admins can assign another sales user.");
-      error.statusCode = 403;
-      throw error;
-    }
-
-    const salesUserId =
-      req.user.role === "ADMIN" && requestedSalesUserId !== undefined
-        ? requestedSalesUserId
-        : req.user.userId;
-
-    // VALIDATE COMPANY AND OPTIONAL CONTACT
-    const { company, contact } = await validateInvoiceCompanyAndContact(
-      companyId,
-      contactId,
-    );
-
-    // VALIDATE SALES USER
-    const salesUser = await getValidInvoiceSalesUser(salesUserId);
-
-    // CREATE DIRECT INVOICE
-    const newDirectInvoice = await prisma.invoice.create({
-      data: buildDirectInvoiceCreateData({
+      // DIRECT INVOICE
+      const {
         description,
         amount,
-        company,
-        contact,
-        salesUser,
-      }),
-    });
+        companyId,
+        contactId,
+        salesUserId: requestedSalesUserId,
+      } = result.data;
 
-    return res.status(201).json(newDirectInvoice);
+      // SALES users may not assign an invoice to another user.
+      // ADMIN may optionally choose another user.
+      if (req.user.role !== "ADMIN" && requestedSalesUserId !== undefined) {
+        const error = new Error("Only admins can assign another sales user.");
+        error.statusCode = 403;
+        throw error;
+      }
+
+      const salesUserId =
+        req.user.role === "ADMIN" && requestedSalesUserId !== undefined
+          ? requestedSalesUserId
+          : req.user.userId;
+
+      // VALIDATE COMPANY AND OPTIONAL CONTACT
+      const { company, contact } = await validateInvoiceCompanyAndContact(
+        companyId,
+        contactId,
+        db,
+      );
+
+      // VALIDATE SALES USER
+      const salesUser = await getValidInvoiceSalesUser(salesUserId, db);
+
+      // CREATE DIRECT INVOICE
+      const newDirectInvoice = await db.invoice.create({
+        data: buildDirectInvoiceCreateData({
+          description,
+          amount,
+          company,
+          contact,
+          salesUser,
+        }),
+      });
+
+      return newDirectInvoice;
+    });
+    return res.status(201).json(newInvoice);
   } catch (error) {
     next(error);
   }
@@ -235,86 +243,97 @@ export const updateInvoice = async (req, res, next) => {
       throw error;
     }
 
-    // CHECK THAT THE INVOICE EXISTS
-    const existingInvoice = await prisma.invoice.findUnique({
-      where: {
-        id: id.data,
-      },
-    });
-
-    if (!existingInvoice) {
-      const error = new Error("Invoice not found.");
-      error.statusCode = 404;
-      throw error;
-    }
-
-    // DETERMINE WHICH COMPANY SHOULD BE USED FOR RELATIONSHIP CHECKS
-    const effectiveCompanyId = companyId ?? existingInvoice.companyId;
-
-    // DETERMINE WHICH CONTACT SHOULD BE USED FOR RELATIONSHIP CHECKS
-    const effectiveContactId =
-      contactId !== undefined ? contactId : existingInvoice.contactId;
-
-    // BUILD THE UPDATE OBJECT
-    const invoiceUpdates = {
-      description,
-      amount,
-      status,
-    };
-
-    // COMPANY CHANGE
-    if (companyId !== undefined) {
-      // Check that the requested company actually exists
-      const company = await prisma.company.findUnique({
+    const updatedInvoice = await withRelationshipTransaction(async (db) => {
+      // CHECK THAT THE INVOICE EXISTS
+      const existingInvoice = await db.invoice.findUnique({
         where: {
-          id: companyId,
+          id: id.data,
         },
       });
 
-      if (!company) {
-        const error = new Error("Company not found.");
+      if (!existingInvoice) {
+        const error = new Error("Invoice not found.");
         error.statusCode = 404;
         throw error;
       }
 
-      // Update both the relation ID and the stored company-name snapshot
-      invoiceUpdates.companyId = companyId;
-      invoiceUpdates.companyName = company.name;
-    }
+      // DETERMINE WHICH COMPANY SHOULD BE USED FOR RELATIONSHIP CHECKS
+      const effectiveCompanyId = companyId ?? existingInvoice.companyId;
 
-    // CONTACT REMOVE
-    if (contactId === null) {
-      invoiceUpdates.contactId = null;
-      invoiceUpdates.contactName = null;
-    }
+      // DETERMINE WHICH CONTACT SHOULD BE USED FOR RELATIONSHIP CHECKS
+      const effectiveContactId =
+        contactId !== undefined ? contactId : existingInvoice.contactId;
 
-    // CONTACT CHECK / CHANGE
-    else if (effectiveContactId !== null) {
-      const contact = await getValidInvoiceContact(
-        effectiveContactId,
+      await assertDocumentTicketCompatibility(
+        db,
+        "invoice",
+        existingInvoice,
         effectiveCompanyId,
+        effectiveContactId,
       );
 
-      if (contactId !== undefined) {
-        invoiceUpdates.contactId = contact.id;
-        invoiceUpdates.contactName = contact.name;
+      // BUILD THE UPDATE OBJECT
+      const invoiceUpdates = {
+        description,
+        amount,
+        status,
+      };
+
+      // COMPANY CHANGE
+      if (companyId !== undefined) {
+        // Check that the requested company actually exists
+        const company = await db.company.findUnique({
+          where: {
+            id: companyId,
+          },
+        });
+
+        if (!company) {
+          const error = new Error("Company not found.");
+          error.statusCode = 404;
+          throw error;
+        }
+
+        // Update both the relation ID and the stored company-name snapshot
+        invoiceUpdates.companyId = companyId;
+        invoiceUpdates.companyName = company.name;
       }
-    }
 
-    // ADMIN CAN REASSIGN RESPONSIBLE SALES USER
-    if (salesUserId !== undefined) {
-      const salesUser = await getValidInvoiceSalesUser(salesUserId);
-      // Update both the relation ID and stored sales-user-name snapshot
-      invoiceUpdates.salesUserId = salesUser.id;
-      invoiceUpdates.salesUserName = salesUser.name;
-    }
+      // CONTACT REMOVE
+      if (contactId === null) {
+        invoiceUpdates.contactId = null;
+        invoiceUpdates.contactName = null;
+      }
 
-    // UPDATE THE INVOICE
-    const updatedInvoice = await prisma.invoice.update({
-      where: {
-        id: id.data,
-      },
-      data: invoiceUpdates,
+      // CONTACT CHECK / CHANGE
+      else if (effectiveContactId !== null) {
+        const contact = await getValidInvoiceContact(
+          effectiveContactId,
+          effectiveCompanyId,
+          db,
+        );
+
+        if (contactId !== undefined) {
+          invoiceUpdates.contactId = contact.id;
+          invoiceUpdates.contactName = contact.name;
+        }
+      }
+
+      // ADMIN CAN REASSIGN RESPONSIBLE SALES USER
+      if (salesUserId !== undefined) {
+        const salesUser = await getValidInvoiceSalesUser(salesUserId, db);
+        // Update both the relation ID and stored sales-user-name snapshot
+        invoiceUpdates.salesUserId = salesUser.id;
+        invoiceUpdates.salesUserName = salesUser.name;
+      }
+
+      // UPDATE THE INVOICE
+      return await db.invoice.update({
+        where: {
+          id: id.data,
+        },
+        data: invoiceUpdates,
+      });
     });
 
     // RETURN UPDATED INVOICE

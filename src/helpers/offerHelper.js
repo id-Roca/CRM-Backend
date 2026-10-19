@@ -1,7 +1,7 @@
 import prisma from "../prisma.js";
 
-export const getValidOfferContact = async (contactId, companyId) => {
-  const contact = await prisma.contact.findUnique({
+export const getValidOfferContact = async (contactId, companyId, db = prisma) => {
+  const contact = await db.contact.findUnique({
     where: {
       id: contactId,
     },
@@ -46,8 +46,8 @@ export const offerDetailSelect = {
   updatedAt: true,
 };
 
-export const getValidOfferSalesUser = async (salesUserId) => {
-  const assignedUser = await prisma.user.findUnique({
+export const getValidOfferSalesUser = async (salesUserId, db = prisma) => {
+  const assignedUser = await db.user.findUnique({
     where: {
       id: salesUserId,
     },

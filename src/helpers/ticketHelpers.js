@@ -5,8 +5,9 @@ export const getValidOfferForTicket = async (
   companyId,
   contactId,
   context = "selected",
+  db = prisma,
 ) => {
-  const offer = await prisma.offer.findUnique({
+  const offer = await db.offer.findUnique({
     where: {
       id: offerId,
     },
@@ -46,8 +47,9 @@ export const getValidInvoiceForTicket = async (
   companyId,
   contactId,
   context = "selected",
+  db = prisma,
 ) => {
-  const invoice = await prisma.invoice.findUnique({
+  const invoice = await db.invoice.findUnique({
     where: {
       id: invoiceId,
     },
@@ -194,8 +196,8 @@ export const ticketDetailSelect = {
   updatedAt: true,
 };
 
-export const validateCompanyAndContact = async (companyId, contactId) => {
-  const company = await prisma.company.findUnique({
+export const validateCompanyAndContact = async (companyId, contactId, db = prisma) => {
+  const company = await db.company.findUnique({
     where: { id: companyId },
   });
 
@@ -205,7 +207,7 @@ export const validateCompanyAndContact = async (companyId, contactId) => {
     throw error;
   }
 
-  const contact = await prisma.contact.findUnique({
+  const contact = await db.contact.findUnique({
     where: { id: contactId },
   });
 
@@ -226,12 +228,12 @@ export const validateCompanyAndContact = async (companyId, contactId) => {
   return { company, contact };
 };
 
-export const validateAssignedUser = async (assignedUserId) => {
+export const validateAssignedUser = async (assignedUserId, db = prisma) => {
   if (assignedUserId === null) {
     return;
   }
 
-  const assignedUser = await prisma.user.findUnique({
+  const assignedUser = await db.user.findUnique({
     where: {
       id: assignedUserId,
     },

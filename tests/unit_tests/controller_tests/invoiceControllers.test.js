@@ -1,3 +1,4 @@
+import { relationshipPrisma } from "../../helpers/relationshipPrisma.js";
 import {
   beforeAll,
   beforeEach,
@@ -22,7 +23,7 @@ const mockPrisma = {
 };
 
 jest.unstable_mockModule("../../../src/prisma.js", () => ({
-  default: mockPrisma,
+  default: relationshipPrisma(mockPrisma),
 }));
 
 let getAllInvoices, getInvoiceById, createNewInvoice, updateInvoice;

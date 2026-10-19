@@ -60,6 +60,7 @@ describe("POST /api/auth/login", () => {
       email: "user@example.test",
       role: "SALES",
       passwordHash: "dummy-password-hash",
+      tokenVersion: 3,
     });
     mockBcrypt.compare.mockResolvedValueOnce(true);
     mockJwt.sign.mockReturnValueOnce("dummy-token");
@@ -88,7 +89,7 @@ describe("POST /api/auth/login", () => {
       "dummy-password-hash",
     );
     expect(mockJwt.sign).toHaveBeenCalledWith(
-      { userId: 1, role: "SALES" },
+      { userId: 1, role: "SALES", tokenVersion: 3 },
       "dummy-test-secret",
       { expiresIn: "1h" },
     );
@@ -150,6 +151,7 @@ describe("POST /api/auth/login", () => {
     mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: 1,
       passwordHash: "dummy-password-hash",
+      tokenVersion: 3,
     });
     mockBcrypt.compare.mockResolvedValueOnce(false);
 
@@ -193,6 +195,7 @@ describe("POST /api/auth/login", () => {
     mockPrisma.user.findUnique.mockResolvedValueOnce({
       id: 1,
       passwordHash: "dummy-password-hash",
+      tokenVersion: 3,
     });
     mockBcrypt.compare.mockRejectedValueOnce(new Error("Comparison failed"));
 
@@ -214,6 +217,7 @@ describe("POST /api/auth/login", () => {
       id: 1,
       role: "SALES",
       passwordHash: "dummy-password-hash",
+      tokenVersion: 3,
     });
     mockBcrypt.compare.mockResolvedValueOnce(true);
     mockJwt.sign.mockImplementationOnce(() => {

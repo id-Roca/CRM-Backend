@@ -59,6 +59,7 @@ describe("login", () => {
       email: "user@example.test",
       role: "SALES",
       passwordHash: "dummy-password-hash",
+      tokenVersion: 3,
     };
     mockPrisma.user.findUnique.mockResolvedValueOnce(fakeUser);
     mockBcrypt.compare.mockResolvedValueOnce(true);
@@ -80,7 +81,7 @@ describe("login", () => {
       "dummy-password-hash",
     );
     expect(mockJwt.sign).toHaveBeenCalledWith(
-      { userId: 1, role: "SALES" },
+      { userId: 1, role: "SALES", tokenVersion: 3 },
       "dummy-test-secret",
       { expiresIn: "1h" },
     );
@@ -206,6 +207,7 @@ describe("login", () => {
       id: 1,
       email: "user@example.test",
       passwordHash: "dummy-password-hash",
+      tokenVersion: 3,
     };
     mockPrisma.user.findUnique.mockResolvedValueOnce(fakeUser);
     mockBcrypt.compare.mockResolvedValueOnce(false);
@@ -263,6 +265,7 @@ describe("login", () => {
       id: 1,
       email: "user@example.test",
       passwordHash: "dummy-password-hash",
+      tokenVersion: 3,
     });
     mockBcrypt.compare.mockRejectedValueOnce(comparisonError);
 
@@ -294,6 +297,7 @@ describe("login", () => {
       email: "user@example.test",
       role: "SALES",
       passwordHash: "dummy-password-hash",
+      tokenVersion: 3,
     });
     mockBcrypt.compare.mockResolvedValueOnce(true);
     mockJwt.sign.mockImplementationOnce(() => {
@@ -316,7 +320,7 @@ describe("login", () => {
       "dummy-password-hash",
     );
     expect(mockJwt.sign).toHaveBeenCalledWith(
-      { userId: 1, role: "SALES" },
+      { userId: 1, role: "SALES", tokenVersion: 3 },
       "dummy-test-secret",
       { expiresIn: "1h" },
     );

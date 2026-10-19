@@ -45,6 +45,7 @@ model User {
   name         String
   email        String   @unique
   passwordHash String
+  tokenVersion Int      @default(0)
   role         Role     @default(SALES)
   createdAt    DateTime @default(now())
   offers       Offer[]

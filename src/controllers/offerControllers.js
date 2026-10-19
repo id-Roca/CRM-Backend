@@ -1,3 +1,7 @@
+import {
+  withRelationshipTransaction,
+  assertDocumentTicketCompatibility,
+} from "../helpers/relationshipHelpers.js";
 import prisma from "../prisma.js";
 import {
   createOfferSchema,
@@ -145,23 +149,25 @@ export const createNewOffer = async (req, res, next) => {
         ? requestedSalesUserId
         : req.user.userId;
 
-    let contact = null;
+    const newOffer = await withRelationshipTransaction(async (db) => {
+      let contact = null;
 
-    if (contactId !== undefined) {
-      contact = await getValidOfferContact(contactId, companyId);
-    }
+      if (contactId !== undefined) {
+        contact = await getValidOfferContact(contactId, companyId, db);
+      }
 
-    await getValidOfferSalesUser(salesUserId);
+      await getValidOfferSalesUser(salesUserId, db);
 
-    const newOffer = await prisma.offer.create({
-      data: {
-        description,
-        amount,
-        companyId,
-        contactId: contact?.id ?? null,
-        salesUserId,
-      },
-      select: offerDetailSelect,
+      return await db.offer.create({
+        data: {
+          description,
+          amount,
+          companyId,
+          contactId: contact?.id ?? null,
+          salesUserId,
+        },
+        select: offerDetailSelect,
+      });
     });
 
     res.status(201).json(newOffer);
@@ -202,44 +208,54 @@ export const updateOffer = async (req, res, next) => {
       throw error;
     }
 
-    const existingOffer = await prisma.offer.findUnique({
-      where: {
-        id: id.data,
-      },
-    });
+    const updatedOffer = await withRelationshipTransaction(async (db) => {
+      const existingOffer = await db.offer.findUnique({
+        where: {
+          id: id.data,
+        },
+      });
 
-    if (!existingOffer) {
-      const error = new Error("Offer not found.");
-      error.statusCode = 404;
-      throw error;
-    }
+      if (!existingOffer) {
+        const error = new Error("Offer not found.");
+        error.statusCode = 404;
+        throw error;
+      }
 
-    const effectiveCompanyId = companyId ?? existingOffer.companyId;
+      const effectiveCompanyId = companyId ?? existingOffer.companyId;
 
-    const effectiveContactId =
-      contactId !== undefined ? contactId : existingOffer.contactId;
+      const effectiveContactId =
+        contactId !== undefined ? contactId : existingOffer.contactId;
 
-    if (effectiveContactId !== null) {
-      await getValidOfferContact(effectiveContactId, effectiveCompanyId);
-    }
+      await assertDocumentTicketCompatibility(
+        db,
+        "offer",
+        existingOffer,
+        effectiveCompanyId,
+        effectiveContactId,
+      );
 
-    if (salesUserId !== undefined) {
-      await getValidOfferSalesUser(salesUserId);
-    }
+      if (effectiveContactId !== null) {
+        await getValidOfferContact(effectiveContactId, effectiveCompanyId, db);
+      }
 
-    const updatedOffer = await prisma.offer.update({
-      where: {
-        id: id.data,
-      },
-      data: {
-        description,
-        amount,
-        companyId,
-        contactId,
-        salesUserId,
-        status,
-      },
-      select: offerDetailSelect,
+      if (salesUserId !== undefined) {
+        await getValidOfferSalesUser(salesUserId, db);
+      }
+
+      return await db.offer.update({
+        where: {
+          id: id.data,
+        },
+        data: {
+          description,
+          amount,
+          companyId,
+          contactId,
+          salesUserId,
+          status,
+        },
+        select: offerDetailSelect,
+      });
     });
 
     res.json(updatedOffer);

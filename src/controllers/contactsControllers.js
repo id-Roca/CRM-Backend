@@ -1,3 +1,7 @@
+import {
+  withRelationshipTransaction,
+  assertContactCompanyChange,
+} from "../helpers/relationshipHelpers.js";
 import prisma from "../prisma.js";
 import {
   createContactSchema,
@@ -122,20 +126,25 @@ export const updateContact = async (req, res, next) => {
 
     const { name, email, companyId } = result.data;
 
-    const updatedContact = await prisma.contact.update({
-      where: {
-        id: id.data,
-      },
-      data: {
-        name,
-        email,
-        company:
-          companyId !== undefined
-            ? {
-                connect: { id: Number(companyId) },
-              }
-            : undefined,
-      },
+    const updatedContact = await withRelationshipTransaction(async (db) => {
+      if (companyId !== undefined) {
+        await assertContactCompanyChange(db, id.data, companyId);
+      }
+      return await db.contact.update({
+        where: {
+          id: id.data,
+        },
+        data: {
+          name,
+          email,
+          company:
+            companyId !== undefined
+              ? {
+                  connect: { id: Number(companyId) },
+                }
+              : undefined,
+        },
+      });
     });
 
     res.json(updatedContact);

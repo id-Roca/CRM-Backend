@@ -1,3 +1,4 @@
+import { relationshipPrisma } from "../../helpers/relationshipPrisma.js";
 import {
   beforeAll,
   expect,
@@ -20,7 +21,7 @@ const mockPrisma = {
 };
 
 jest.unstable_mockModule("../../../src/prisma.js", () => ({
-  default: mockPrisma,
+  default: relationshipPrisma(mockPrisma),
 }));
 
 let getAllOffers, getOfferById, createNewOffer, updateOffer;
