@@ -42,6 +42,17 @@ app.use(
 app.use("/api", apiLimiter);
 app.use("/api/auth/login", loginLimiter);
 
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "Welcome to the CRM Backend API!",
+    description:
+      "A RESTful CRM API with JWT authentication, role-based access control, and PostgreSQL.",
+    documentation: "https://github.com/id-Roca/CRM-Backend",
+    status: "running",
+  });
+});
+
 app.use("/api", companyRoutes);
 app.use("/api", contactsRoutes);
 app.use("/api", authRoutes);
